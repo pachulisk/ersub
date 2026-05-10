@@ -84,17 +84,12 @@ init([]) ->
         #{id => ersub_clips_pool,
           start => {ersub_clips_pool, start_link, []},
           restart => permanent,
-          type => worker}
+          type => worker},
 
-        %% Children added as modules are implemented:
-        %% - ersub_db_sup (rest_for_one: repo_pool + migration)
-        %% - ersub_clips_pool_sup (poolboy)
-        %% - ersub_platform_sup
-        %% - ersub_concurrency_sup
-        %% - ersub_session_srv
-        %% - ersub_billing_sup
-        %% - ersub_scheduler_srv
-        %% - ersub_auth_srv
+        #{id => ersub_pricing_srv,
+          start => {ersub_pricing_srv, start_link, []},
+          restart => permanent,
+          type => worker}
         %% NOTE: Cowboy listener started in ersub_app:start/2
     ],
     {ok, {SupFlags, Children}}.

@@ -19,7 +19,7 @@ P1-17,1-MVP,安全,IP 黑白名单,CIDR 解析与匹配、黑名单优先、per-
 P1-18,1-MVP,网关,Claude /v1/messages 代理（非流式）,请求解析、上游转发 (gun)、响应透传、基础错误处理,§3.3 §6.1,ersub_claude_handler.erl,P1-02 P1-16,P0,L,DONE
 P1-19,1-MVP,网关,请求转换基础,model 名称透传、system prompt 保留、header 过滤,§4.8,ersub_request_transform.erl,P1-18,P1,M,DONE
 P1-20,1-MVP,运维,Setup Wizard,首次运行检测 (.installed)、交互式 DB/admin/server 配置、config 生成,§4.19,ersub_setup.erl,P1-03 P1-05,P1,M,TODO
-P1-21,1-MVP,运维,健康检查端点,GET /health 端点、DB 连通性检查、CLIPS pool 存活检查,§3.1,ersub_health_handler.erl,P1-02 P1-04 P1-14,P1,S,TODO
+P1-21,1-MVP,运维,健康检查端点,GET /health 端点、DB 连通性检查、CLIPS pool 存活检查,§3.1,ersub_health_handler.erl,P1-02 P1-04 P1-14,P1,S,DONE
 P1-T1,1-MVP,测试,测试基础设施,eunit/CT 配置、ersub_test_helpers、ersub_test_db（Docker PostgreSQL + 事务隔离）,§13.2 §13.3 §13.5,test/support/,P1-04,P0,M,DONE
 P1-T2,1-MVP,测试,CLIPS Port 测试,CLIPS worker 生命周期、NDJSON 通信、规则加载验证,§13.5,test/integration/ersub_clips_SUITE.erl,P1-14 P1-T1,P0,M,TODO
 P1-T3,1-MVP,测试,IP/CIDR 单元测试,表驱动测试：白名单、黑名单、CIDR 匹配、边界情况,§13.4,test/unit/ersub_ip_access_tests.erl,P1-17,P1,S,DONE
@@ -43,8 +43,8 @@ P2-15,2-核心,并发,并发控制服务,ersub_concurrency_srv：counters 槽管
 P2-16,2-核心,限速,RPM 滑动窗口限速,ersub_rate_limiter：ETS 时间戳列表、per-user/api_key/group 三级、fail-open/close,§4.12,ersub_rate_limiter.erl,P1-01,P1,M,DONE
 P2-17,2-核心,连接池,上游连接池管理,ersub_upstream_pool：gun 连接池、三种隔离策略（proxy/account/account_proxy）、LRU+idle 驱逐,§4.11,ersub_upstream_pool.erl,P1-01,P0,L,DONE
 P2-18,2-核心,网关,Claude handler 完整版,集成调度→并发→计费→流式→failover 完整管道,§3.3,ersub_claude_handler.erl,P2-01 P2-06 P2-12 P2-15,P0,XL,DONE
-P2-T1,2-核心,测试,调度器单元测试,评分算法正确性、top-k 选择、排除列表,§13.4,test/unit/ersub_scheduler_tests.erl,P2-05 P2-06,P0,M,TODO
-P2-T2,2-核心,测试,计费单元测试,token/per_request/image 三模式、tier 乘数、长上下文、rate_multiplier=0,§13.4,test/unit/ersub_billing_tests.erl,P2-09 P2-10 P2-11,P0,M,TODO
+P2-T1,2-核心,测试,调度器单元测试,评分算法正确性、top-k 选择、排除列表,§13.4,test/unit/ersub_scheduler_tests.erl,P2-05 P2-06,P0,M,DONE
+P2-T2,2-核心,测试,计费单元测试,token/per_request/image 三模式、tier 乘数、长上下文、rate_multiplier=0,§13.4,test/unit/ersub_billing_tests.erl,P2-09 P2-10 P2-11,P0,M,DONE
 P2-T3,2-核心,测试,并发控制集成测试,槽获取/释放、等待队列、process 崩溃自动释放、队列满拒绝,§13.5,test/integration/ersub_concurrency_SUITE.erl,P2-15,P0,M,TODO
 P2-T4,2-核心,测试,会话粘滞集成测试,ETS TTL 过期、命中刷新、账户不兼容清理,§13.5,test/integration/ersub_session_SUITE.erl,P2-08,P1,S,TODO
 P2-T5,2-核心,测试,CLIPS 调度集成测试,候选账户评分、并发请求隔离、规则热更新,§13.5,test/integration/ersub_clips_SUITE.erl,P2-05,P0,M,TODO

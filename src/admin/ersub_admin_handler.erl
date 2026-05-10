@@ -179,6 +179,11 @@ handle(<<"POST">>, [<<"accounts">>, <<"reload">>], Req0, State, _Claims) ->
     reply_ok(#{success => true, running => length(ersub_platform_sup:list_accounts())},
              Req0, State);
 
+%% POST /api/admin/clips/reload
+handle(<<"POST">>, [<<"clips">>, <<"reload">>], Req0, State, _Claims) ->
+    ersub_clips_pool:reload_rules(),
+    reply_ok(#{success => true}, Req0, State);
+
 handle(_, _, Req0, State, _) ->
     Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
     {ok, Req, State}.
