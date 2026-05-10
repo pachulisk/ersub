@@ -62,12 +62,12 @@ P3-09,3-多平台,Channel,Channel 级定价覆盖,复合 key {GroupId/Platform/M
 P3-10,3-多平台,认证,OAuth Token 后台刷新服务,ersub_token_refresh_srv：定时刷新、401 触发、平台特定 refresher behaviour、cooldown,§4.10,ersub_token_refresh_srv.erl,P2-03,P0,XL,DONE
 P3-11,3-多平台,认证,Claude OAuth refresher,Anthropic OAuth token refresh 实现,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,DONE
 P3-12,3-多平台,认证,OpenAI OAuth refresher,OpenAI OAuth token refresh + training opt-out 可选执行,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,DONE
-P3-13,3-多平台,错误处理,错误透传规则引擎,CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为,§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,TODO
+P3-13,3-多平台,错误处理,错误透传规则引擎,CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为,§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,DONE
 P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,error_passthrough_rules DDL,§5.2,004_error_passthrough.sql,P1-05,P1,S,DONE
 P3-15,3-多平台,安全,Claude Code 客户端检测,User-Agent 校验 claude-cli/X.Y.Z、metadata originator 检测、codex_cli_only 分组限制,§4.15,ersub_client_detector.erl,P1-16,P1,M,DONE
 P3-16,3-多平台,网关,Cache Control 注入,prompt caching 标识检查、cache_control block 注入请求体,§3.3,ersub_request_transform.erl,P3-08,P2,M,TODO
-P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
-P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group model pattern→account list 映射,§2.4,priv/clips/model_routing.clp,P1-15,P1,M,TODO
+P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,DONE
+P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group model pattern→account list 映射,§2.4,priv/clips/model_routing.clp,P1-15,P1,M,DONE
 P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,DONE
 P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,DONE
 P3-T3,3-多平台,测试,Claude Code 检测单元测试,UA 格式、大小写、metadata originator、codex_cli_only 限制,§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,DONE
@@ -79,7 +79,7 @@ P4-03,4-管理安全,管理,API Key 管理 API,GET/POST/PUT/DELETE /api/keys、k
 P4-04,4-管理安全,配额,分组/订阅系统 migration,user_subscriptions 表 DDL,§5.2,005_subscriptions.sql,P1-05,P0,S,DONE
 P4-05,4-管理安全,配额,CLIPS 配额检查规则,quota.clp：日/周/月配额检查、violation 断言、quota-ok 规则,§4.6,priv/clips/quota.clp,P1-15,P0,M,DONE
 P4-06,4-管理安全,配额,配额窗口重置服务,ersub_quota_srv：定时 daily/weekly/monthly 重置,§4.6,ersub_quota_srv (in billing_srv),P2-12 P4-04,P0,M,DONE
-P4-07,4-管理安全,管理,公告系统,announcements + announcement_reads 表、CRUD API、已读追踪,§4.17,ersub_announcement_handler.erl,P1-11,P2,M,TODO
+P4-07,4-管理安全,管理,公告系统,announcements + announcement_reads 表、CRUD API、已读追踪,§4.17,ersub_announcement_handler.erl,P1-11,P2,M,DONE
 P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_reads DDL,§5.2,006_announcements.sql,P1-05,P2,S,DONE
 P4-09,4-管理安全,数据库,软删除基础设施,deleted_at 字段、partial unique index、find_active 查询包装,§4.22,ersub_repo.erl,P1-11,P1,M,DONE
 P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,DONE
@@ -112,7 +112,7 @@ P5-14,5-运营,运营,促销码系统,promo_codes + promo_code_usage 表、折�
 P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_codes + promo_code_usage DDL,§5.2,010_redeem_promo.sql,P1-05,P2,S,DONE
 P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,DONE
 P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,DONE
-P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,TODO
+P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,DONE
 P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
 P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,TODO
 P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,DONE
@@ -161,6 +161,6 @@ P6-T3,6-生产,测试,E2E 网关测试 — Gemini,Gemini /v1beta/* 端点验证,
 P6-T4,6-生产,测试,上游连接池集成测试,三种隔离策略、LRU 驱逐、inFlight 计数,§13.5,test/integration/ersub_upstream_pool_SUITE.erl,P2-17,P1,M,TODO
 P6-T5,6-生产,测试,调度器属性测试 (PropEr),任意账户状态下的调度收敛性,§13.7,test/property/ersub_scheduler_prop.erl,P2-06,P2,M,TODO
 P6-T6,6-生产,测试,Makefile 测试 targets,test-unit / test-integration / test-e2e / test-property / bench / cover / dialyzer,§13.11,Makefile,P1-01,P1,S,DONE
-P6-T7,6-生产,测试,GitHub Actions CI,unit + integration + property + lint (dialyzer+xref) jobs,§13.11,.github/workflows/ci.yml,P6-T6,P1,M,TODO
-P6-T8,6-生产,测试,RPM 限速单元测试,滑动窗口正确性、多级限速、fail-open/close,§13.4,test/unit/ersub_rate_limiter_tests.erl,P2-16,P1,S,TODO
+P6-T7,6-生产,测试,GitHub Actions CI,unit + integration + property + lint (dialyzer+xref) jobs,§13.11,.github/workflows/ci.yml,P6-T6,P1,M,DONE
+P6-T8,6-生产,测试,RPM 限速单元测试,滑动窗口正确性、多级限速、fail-open/close,§13.4,test/unit/ersub_rate_limiter_tests.erl,P2-16,P1,S,DONE
 P6-T9,6-生产,测试,ETS 性能基准,ETS 读写性能、并发负载,§13.8,test/bench/ersub_ets_bench.erl,P1-01,P3,S,TODO

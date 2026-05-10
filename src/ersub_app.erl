@@ -5,8 +5,11 @@
 
 start(_StartType, _StartArgs) ->
     ersub_auth_middleware:init_cache(),
+    {ok, Pid} = ersub_sup:start_link(),
+    %% Post-supervisor setup
+    ersub_setup:check_and_run(),
     {ok, _} = ersub_router:start_listener(),
-    ersub_sup:start_link().
+    {ok, Pid}.
 
 stop(_State) ->
     ersub_router:stop_listener(),

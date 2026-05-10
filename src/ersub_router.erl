@@ -20,7 +20,7 @@ routes() ->
             {"/api/usage/[...]", Stub, []},
             {"/api/admin/[...]", ersub_admin_handler, []},
             {"/api/payment/[...]", Stub, []},
-            {"/api/auth/[...]", Stub, []},
+            {"/api/auth/[...]", ersub_auth_handler, []},
             {"/api/announcements/[...]", ersub_announcement_handler, []},
 
             %% Health check (implemented)
