@@ -12,14 +12,14 @@
         sasl,
         crypto,
         ssl,
-        inets,
         cowboy,
         gun,
         jsx,
         poolboy,
-        epgsql,
         yamerl
     ]},
+    %% epgsql started on-demand by ersub_repo_pool, not at boot
+    {included_applications, [epgsql]},
     {env, []},
     {modules, []},
     {licenses, ["Apache-2.0"]},

@@ -16,13 +16,8 @@ init([]) ->
         period => 60
     },
     Children = [
-        %% Phase 1: Config server (must start first)
-        %% #{id => ersub_config_srv,
-        %%   start => {ersub_config_srv, start_link, []},
-        %%   restart => permanent,
-        %%   type => worker}
-
-        %% Additional children added as modules are implemented:
+        %% Children added as modules are implemented:
+        %% - ersub_config_srv (gen_server)
         %% - ersub_db_sup (rest_for_one: repo_pool + migration)
         %% - ersub_clips_pool_sup (poolboy)
         %% - ersub_platform_sup
@@ -31,6 +26,6 @@ init([]) ->
         %% - ersub_billing_sup
         %% - ersub_scheduler_srv
         %% - ersub_auth_srv
-        %% - cowboy_listener
+        %% NOTE: Cowboy listener started in ersub_app:start/2
     ],
     {ok, {SupFlags, Children}}.
