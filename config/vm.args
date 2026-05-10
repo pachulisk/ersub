@@ -1,0 +1,27 @@
+## Name of the node
+-sname ersub
+
+## Cookie for distributed erlang
+-setcookie ersub_cookie
+
+## Enable SMP
+-smp auto
+
+## Increase process limit
++P 1048576
+
+## Increase port limit
++Q 65536
+
+## Increase atom limit
++t 1048576
+
+## Scheduler settings
++K true
++A 64
+
+## GC settings
++hms 8192
+
+## Kernel poll
++K true

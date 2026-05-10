@@ -1,0 +1,45 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  max_connections: 10000
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "${DB_PASSWORD}"
+  database: "ersub"
+  pool_size: 20
+
+clips:
+  pool_size: 8
+  rules_dir: "priv/clips"
+  custom_rules_dir: "priv/clips/custom"
+
+gateway:
+  max_account_switches: 10
+  upstream_timeout_ms: 600000
+  max_body_size: 268435456
+  ping_interval_ms: 10000
+
+scheduling:
+  sticky_session_ttl_s: 3600
+  top_k: 7
+  score_weights:
+    priority: 1.0
+    load: 1.0
+    queue: 0.7
+    error_rate: 0.8
+    ttft: 0.5
+
+concurrency:
+  default_user_max: 5
+  wait_queue_extra: 20
+  wait_timeout_ms: 30000
+
+billing:
+  sync_interval_ms: 5000
+
+auth:
+  jwt_secret: "${JWT_SECRET}"
+  jwt_expire_hours: 24

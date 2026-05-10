@@ -1,0 +1,27 @@
+{application, ersub, [
+    {description, "ErSub - Erlang/OTP + CLIPS AI API Gateway"},
+    {vsn, "0.1.0"},
+    {registered, [
+        ersub_sup,
+        ersub_config_srv
+    ]},
+    {mod, {ersub_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl,
+        crypto,
+        ssl,
+        inets,
+        cowboy,
+        gun,
+        jsx,
+        poolboy,
+        epgsql,
+        yamerl
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, []}
+]}.
