@@ -113,8 +113,8 @@ P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_code
 P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,DONE
 P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,DONE
 P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,DONE
-P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
-P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,TODO
+P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,DONE
+P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,DONE
 P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,DONE
 P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,DONE
 P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
@@ -124,14 +124,14 @@ P6-01,6-生产,WebSocket,WebSocket v2 handler,cowboy_websocket behaviour、帧�
 P6-02,6-生产,WebSocket,WebSocket 连接池,per-account WS 连接池、min/max idle、idle timeout,§4.21,ersub_openai_ws_handler.erl,P6-01,P1,M,TODO
 P6-03,6-生产,WebSocket,WebSocket RateLimit 信号,WS 帧中的 RateLimit 信号检测与处理,§4.21,ersub_openai_ws_handler.erl,P6-01,P2,S,TODO
 P6-04,6-生产,代理,代理管理服务,ersub_proxy_srv：代理 CRUD、协议支持（HTTP/HTTPS/SOCKS5）,§4.25,ersub_proxy_srv.erl,P1-11,P2,M,DONE
-P6-05,6-生产,代理,代理延迟探测,定时 probe、延迟缓存、不健康代理标记,§4.25,ersub_proxy_srv.erl,P6-04,P2,M,TODO
-P6-06,6-生产,代理,TLS 指纹伪装,tls_fingerprint_profiles 表/配置、JA3 hash、请求头伪装,§4.25,ersub_proxy_srv.erl,P6-04,P3,M,TODO
+P6-05,6-生产,代理,代理延迟探测,定时 probe、延迟缓存、不健康代理标记,§4.25,ersub_proxy_srv.erl,P6-04,P2,M,DONE
+P6-06,6-生产,代理,TLS 指纹伪装,tls_fingerprint_profiles 表/配置、JA3 hash、请求头伪装,§4.25,ersub_proxy_srv.erl,P6-04,P3,M,DONE
 P6-07,6-生产,代理,代理/TLS 表 migration,proxies + tls_fingerprint_profiles DDL,§5.2,013_proxy_tls.sql,P1-05,P2,S,DONE
-P6-08,6-生产,健康检测,定时健康检测服务,ersub_scheduled_test_srv：定时请求、结果记录、auto_recover,§4.26,ersub_scheduled_test_srv.erl,P2-03,P2,L,TODO
+P6-08,6-生产,健康检测,定时健康检测服务,ersub_scheduled_test_srv：定时请求、结果记录、auto_recover,§4.26,ersub_scheduled_test_srv.erl,P2-03,P2,L,DONE
 P6-09,6-生产,健康检测,健康检测表 migration,scheduled_tests DDL,§5.2,014_scheduled_tests.sql,P1-05,P2,S,DONE
-P6-10,6-生产,监控,Channel 监控 runner,ersub_channel_monitor_runner：定时触发检查,§4.27,ersub_channel_monitor_runner.erl,P3-06,P2,M,TODO
-P6-11,6-生产,监控,Channel 监控 checker,执行检查请求、记录结果到 histories 表,§4.27,ersub_channel_monitor_checker.erl,P6-10,P2,M,TODO
-P6-12,6-生产,监控,Channel 监控日聚合,daily_rollups 计算、成功率/延迟统计,§4.27,ersub_channel_monitor_aggregator.erl,P6-11,P2,M,TODO
+P6-10,6-生产,监控,Channel 监控 runner,ersub_channel_monitor_runner：定时触发检查,§4.27,ersub_channel_monitor_runner.erl,P3-06,P2,M,DONE
+P6-11,6-生产,监控,Channel 监控 checker,执行检查请求、记录结果到 histories 表,§4.27,ersub_channel_monitor_checker.erl,P6-10,P2,M,DONE
+P6-12,6-生产,监控,Channel 监控日聚合,daily_rollups 计算、成功率/延迟统计,§4.27,ersub_channel_monitor_aggregator.erl,P6-11,P2,M,DONE
 P6-13,6-生产,监控,Channel 监控表 migration,channel_monitors + histories + daily_rollups + request_templates DDL,§5.2,015_channel_monitor.sql,P1-05,P2,S,DONE
 P6-14,6-生产,告警,Ops 告警评估器,ersub_ops_alert_srv：规则评估、severity 分级、通知发送,§4.33,ersub_ops_alert_srv.erl,P1-01,P2,L,DONE
 P6-15,6-生产,告警,告警静默规则,ops_alert_silences：静默期管理,§4.33,ersub_ops_alert_srv.erl,P6-14,P2,S,DONE
@@ -141,13 +141,13 @@ P6-18,6-生产,可观测性,健康评分服务,ersub_health_srv：多维健康�
 P6-19,6-生产,可观测性,指标聚合服务,ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度,§4.18,ersub_metrics_srv.erl,P2-13,P2,L,DONE
 P6-20,6-生产,可观测性,指标聚合表 migration,metrics_aggregated DDL + 索引,§5.2,017_metrics.sql,P1-05,P2,S,DONE
 P6-21,6-生产,可观测性,使用记录定时清理,ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时,§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,DONE
-P6-22,6-生产,可观测性,Ops 系统日志,ops_system_logs 表、结构化日志 sink,§4.18,ersub_ops_system_log.erl,P1-11,P3,M,TODO
+P6-22,6-生产,可观测性,Ops 系统日志,ops_system_logs 表、结构化日志 sink,§4.18,ersub_ops_system_log.erl,P1-11,P3,M,DONE
 P6-23,6-生产,可观测性,系统日志表 migration,ops_system_logs DDL,§5.2,018_ops_logs.sql,P1-05,P3,S,DONE
 P6-24,6-生产,定价,定价表自动更新,ersub_pricing_srv：LiteLLM JSON 解析、定时拉取、内嵌 fallback,§4.20,ersub_pricing_srv.erl,P1-03,P1,L,DONE
 P6-25,6-生产,定价,内嵌定价 fallback,priv/pricing/model_prices.json 编译时打包,§4.20,priv/pricing/model_prices.json,P6-24,P1,S,DONE
 P6-26,6-生产,计费,使用计费去重,usage_billing_dedup 表、request_id 检查、定期归档,§4.32,ersub_billing_srv.erl,P2-12,P2,M,DONE
 P6-27,6-生产,计费,去重表 migration,usage_billing_dedup + usage_billing_dedup_archive DDL,§5.2,019_billing_dedup.sql,P1-05,P2,S,DONE
-P6-28,6-生产,安全,安全密钥存储,security_secrets 表、加密存储、CRUD API,§5.2,ersub_admin_handler.erl,P1-11,P3,M,TODO
+P6-28,6-生产,安全,安全密钥存储,security_secrets 表、加密存储、CRUD API,§5.2,ersub_admin_handler.erl,P1-11,P3,M,DONE
 P6-29,6-生产,安全,安全密钥表 migration,security_secrets DDL,§5.2,020_security_secrets.sql,P1-05,P3,S,DONE
 P6-30,6-生产,管理,账户批量导入,POST /api/admin/accounts/import：JSON 批量导入、校验、去重,§4.35,ersub_admin_handler.erl,P1-11,P3,M,DONE
 P6-31,6-生产,部署,Dockerfile,多阶段构建：Erlang 编译 + CLIPS 编译 + 前端构建 + release,§10.3,deploy/Dockerfile,P1-01,P1,M,DONE
