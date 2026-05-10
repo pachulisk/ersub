@@ -1,6 +1,7 @@
 -module(ersub_security_middleware).
 
--export([apply_security_headers/1, apply_cors_headers/2, handle_preflight/1]).
+-export([apply_security_headers/1, apply_cors_headers/2, handle_preflight/1,
+         check_backend_mode/1]).
 
 %% Apply security headers to a response.
 -spec apply_security_headers(cowboy_req:req()) -> cowboy_req:req().
@@ -42,6 +43,19 @@ handle_preflight(Req0) ->
     AllowedOrigins = get_allowed_origins(),
     Req = apply_cors_headers(Req0, AllowedOrigins),
     cowboy_req:reply(204, #{}, <<>>, Req).
+
+%% Check if backend is in read-only mode.
+%% Blocks non-GET/HEAD/OPTIONS requests when enabled.
+-spec check_backend_mode(binary()) -> ok | {error, read_only}.
+
+check_backend_mode(<<"GET">>) -> ok;
+check_backend_mode(<<"HEAD">>) -> ok;
+check_backend_mode(<<"OPTIONS">>) -> ok;
+check_backend_mode(_Method) ->
+    case ersub_config_srv:get(backend_mode, <<"standard">>) of
+        <<"read_only">> -> {error, read_only};
+        _ -> ok
+    end.
 
 %%% Internal
 
