@@ -24,6 +24,16 @@ init([]) ->
         #{id => ersub_repo_pool,
           start => {ersub_repo_pool, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_session_srv,
+          start => {ersub_session_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_concurrency_srv,
+          start => {ersub_concurrency_srv, start_link, []},
+          restart => permanent,
           type => worker}
 
         %% Children added as modules are implemented:
