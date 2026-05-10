@@ -1,7 +1,8 @@
 -module(ersub_request_transform).
 
 -export([transform_claude_request/2, build_upstream_headers/2,
-         resolve_model_mapping/2, match_wildcard/2]).
+         resolve_model_mapping/2, match_wildcard/2,
+         resolve_model_chain/3]).
 
 %% Transform a Claude API request body before forwarding upstream.
 %% Handles model passthrough, system prompt preservation, metadata stripping.
@@ -47,6 +48,44 @@ resolve_model_mapping(Model, Mapping) ->
         Target ->
             Target
     end.
+
+%% Three-level model mapping chain: Channel → Account → Group.
+%% Returns {FinalModel, MappingChain, BillingModelSource}.
+-spec resolve_model_chain(binary(), map(), map()) ->
+    {binary(), binary(), binary()}.
+
+resolve_model_chain(OriginalModel, Account, ChannelMapping) ->
+    %% Level 1: Channel mapping
+    {Model1, Source1} = case map_size(ChannelMapping) of
+        0 -> {OriginalModel, <<"original">>};
+        _ ->
+            case resolve_model_mapping(OriginalModel, ChannelMapping) of
+                OriginalModel -> {OriginalModel, <<"original">>};
+                Mapped -> {Mapped, <<"channel_mapped">>}
+            end
+    end,
+    %% Level 2: Account-level mapping (from credentials.model_mapping)
+    AccMapping = maps:get(<<"model_mapping">>,
+        maps:get(credentials, Account, #{}), #{}),
+    {Model2, Source2} = case map_size(AccMapping) of
+        0 -> {Model1, Source1};
+        _ ->
+            case resolve_model_mapping(Model1, AccMapping) of
+                Model1 -> {Model1, Source1};
+                Mapped2 -> {Mapped2, <<"upstream">>}
+            end
+    end,
+    %% Build chain string
+    Chain = case Model2 =:= OriginalModel of
+        true -> OriginalModel;
+        false ->
+            Parts = lists:filter(fun(P) -> P =/= <<>> end,
+                [OriginalModel,
+                 case Model1 =/= OriginalModel of true -> Model1; false -> <<>> end,
+                 case Model2 =/= Model1 of true -> Model2; false -> <<>> end]),
+            iolist_to_binary(lists:join(<<"→"/utf8>>, Parts))
+    end,
+    {Model2, Chain, Source2}.
 
 %% Match a model name against wildcard patterns (e.g., "gpt-*" matches "gpt-4o").
 -spec match_wildcard(binary(), [{binary(), binary()}]) -> binary() | undefined.

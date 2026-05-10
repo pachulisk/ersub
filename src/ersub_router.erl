@@ -15,10 +15,10 @@ routes() ->
             {"/antigravity/v1/messages", Stub, []},
 
             %% Management API (stubs until implemented)
-            {"/api/user/[...]", Stub, []},
+            {"/api/user/[...]", ersub_user_handler, []},
             {"/api/keys/[...]", ersub_keys_handler, []},
             {"/api/usage/[...]", Stub, []},
-            {"/api/admin/[...]", Stub, []},
+            {"/api/admin/[...]", ersub_admin_handler, []},
             {"/api/payment/[...]", Stub, []},
             {"/api/auth/[...]", Stub, []},
             {"/api/announcements/[...]", Stub, []},
