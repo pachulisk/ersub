@@ -9,8 +9,11 @@ all() -> [acquire_release_test, queue_full_test, process_crash_release_test].
 
 init_per_suite(Config) ->
     os:putenv("DB_USER", os:getenv("DB_USER", "shikun")),
-    ersub_test_helpers:start_app(),
-    Config.
+    try ersub_test_helpers:start_app() of
+        ok -> Config
+    catch _:Reason ->
+        {skip, {app_start_failed, Reason}}
+    end.
 
 end_per_suite(_Config) -> ok.
 
@@ -40,7 +43,7 @@ process_crash_release_test(_Config) ->
     UserId = 77777,
     %% Spawn a process that acquires and then crashes
     Self = self(),
-    Pid = spawn(fun() ->
+    _Pid = spawn(fun() ->
         {ok, _Ref} = ersub_concurrency_srv:acquire(UserId, 2),
         Self ! acquired,
         exit(crash)

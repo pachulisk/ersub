@@ -61,7 +61,11 @@ transaction(Fun) ->
 init([]) ->
     Host = ersub_config_srv:get(database_host, "localhost"),
     Port = ersub_config_srv:get(database_port, 5432),
-    User = ersub_config_srv:get(database_user, "postgres"),
+    User0 = ersub_config_srv:get(database_user, ""),
+    User = case User0 of
+        "" -> os:getenv("USER", "postgres");
+        _ -> User0
+    end,
     Password = ersub_config_srv:get(database_password, ""),
     Database = ersub_config_srv:get(database_database, "ersub"),
     PoolSize = ersub_config_srv:get(database_pool_size, 20),

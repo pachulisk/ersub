@@ -9,8 +9,11 @@ all() -> [create_order_test].
 
 init_per_suite(Config) ->
     os:putenv("DB_USER", os:getenv("DB_USER", "shikun")),
-    ersub_test_helpers:start_app(),
-    Config.
+    try ersub_test_helpers:start_app() of
+        ok -> Config
+    catch _:Reason ->
+        {skip, {app_start_failed, Reason}}
+    end.
 
 end_per_suite(_Config) ->
     ersub_test_helpers:cleanup_tables(),

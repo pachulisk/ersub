@@ -99,6 +99,16 @@ init([]) ->
         #{id => ersub_ops_alert_srv,
           start => {ersub_ops_alert_srv, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_payment_srv,
+          start => {ersub_payment_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_token_refresh_srv,
+          start => {ersub_token_refresh_srv, start_link, []},
+          restart => permanent,
           type => worker}
         %% NOTE: Cowboy listener started in ersub_app:start/2
     ],
