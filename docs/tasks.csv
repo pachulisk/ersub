@@ -84,7 +84,7 @@ P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_rea
 P4-09,4-管理安全,数据库,软删除基础设施,deleted_at 字段、partial unique index、find_active 查询包装,§4.22,ersub_repo.erl,P1-11,P1,M,DONE
 P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,DONE
 P4-11,4-管理安全,安全,CORS 中间件,可配置 allowed_origins、OPTIONS 预检短路、credentials 支持,§4.16,ersub_cors_middleware.erl,P1-02,P1,M,DONE
-P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,scheme 强制、主机白名单 (通配符)、私有 IP 阻断、DNS Rebinding 防护,§4.14,ersub_url_validator.erl,P1-01,P1,L,TODO
+P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,scheme 强制、主机白名单 (通配符)、私有 IP 阻断、DNS Rebinding 防护,§4.14,ersub_url_validator.erl,P1-01,P1,L,DONE
 P4-13,4-管理安全,审核,内容审核服务,ersub_moderation_srv：off/observe/pre_block 三模式、OpenAI API 调用,§4.7,ersub_moderation_srv.erl,P1-02,P2,L,TODO
 P4-14,4-管理安全,审核,内容审核 worker pool,poolboy 异步 worker、SHA256 去重缓存、13类风险评分,§4.7,ersub_moderation_worker.erl ersub_moderation_cache.erl,P4-13,P2,M,TODO
 P4-15,4-管理安全,审核,自动封号,违规次数阈值检查、时间窗口、用户 is_banned 标记,§4.7,ersub_moderation_srv.erl,P4-14,P2,S,TODO
