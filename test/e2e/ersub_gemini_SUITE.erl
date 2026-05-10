@@ -20,6 +20,6 @@ gemini_no_auth_test(_Config) ->
     {ok, _} = gun:await_up(ConnPid),
     StreamRef = gun:post(ConnPid, "/gemini/v1beta/test",
         [{<<"content-type">>, <<"application/json">>}],
-        <<"{}">>/utf8),
+        <<"{}">>),
     {response, nofin, 401, _} = gun:await(ConnPid, StreamRef),
     gun:close(ConnPid).

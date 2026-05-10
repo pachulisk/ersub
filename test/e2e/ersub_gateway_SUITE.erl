@@ -34,7 +34,7 @@ claude_no_auth_test(_Config) ->
     {ok, _} = gun:await_up(ConnPid),
     StreamRef = gun:post(ConnPid, "/v1/messages",
         [{<<"content-type">>, <<"application/json">>}],
-        <<"{}">>/utf8),
+        <<"{}">>),
     {response, nofin, 401, _} = gun:await(ConnPid, StreamRef),
     gun:close(ConnPid).
 
@@ -44,6 +44,6 @@ claude_invalid_key_test(_Config) ->
     StreamRef = gun:post(ConnPid, "/v1/messages",
         [{<<"content-type">>, <<"application/json">>},
          {<<"x-api-key">>, <<"sk-invalid">>}],
-        <<"{}">>/utf8),
+        <<"{}">>),
     {response, nofin, 401, _} = gun:await(ConnPid, StreamRef),
     gun:close(ConnPid).

@@ -20,6 +20,6 @@ openai_no_auth_test(_Config) ->
     {ok, _} = gun:await_up(ConnPid),
     StreamRef = gun:post(ConnPid, "/openai/v1/chat/completions",
         [{<<"content-type">>, <<"application/json">>}],
-        <<"{}">>/utf8),
+        <<"{}">>),
     {response, nofin, 401, _} = gun:await(ConnPid, StreamRef),
     gun:close(ConnPid).
