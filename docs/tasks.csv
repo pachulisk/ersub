@@ -75,12 +75,12 @@ P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复�
 P3-T5,3-多平台,测试,Token 刷新集成测试,定时触发、401 触发、cooldown、缓存失效链,§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,TODO
 P4-01,4-管理安全,管理,用户管理 API,GET/PUT /api/user/profile、余额历史、密码修改、2FA 开关,§6.1,ersub_user_handler.erl,P1-11 P1-16,P0,L,TODO
 P4-02,4-管理安全,管理,Admin 管理 API,用户/账户/分组 CRUD、使用统计、仪表盘、设置管理,§6.1,ersub_admin_handler.erl,P1-11 P1-16,P0,XL,TODO
-P4-03,4-管理安全,管理,API Key 管理 API,GET/POST/PUT/DELETE /api/keys、key 生成 (hash+prefix),§6.1,ersub_keys_handler.erl,P1-11,P0,M,TODO
-P4-04,4-管理安全,配额,分组/订阅系统 migration,user_subscriptions 表 DDL,§5.2,005_subscriptions.sql,P1-05,P0,S,TODO
+P4-03,4-管理安全,管理,API Key 管理 API,GET/POST/PUT/DELETE /api/keys、key 生成 (hash+prefix),§6.1,ersub_keys_handler.erl,P1-11,P0,M,DONE
+P4-04,4-管理安全,配额,分组/订阅系统 migration,user_subscriptions 表 DDL,§5.2,005_subscriptions.sql,P1-05,P0,S,DONE
 P4-05,4-管理安全,配额,CLIPS 配额检查规则,quota.clp：日/周/月配额检查、violation 断言、quota-ok 规则,§4.6,priv/clips/quota.clp,P1-15,P0,M,TODO
 P4-06,4-管理安全,配额,配额窗口重置服务,ersub_quota_srv：定时 daily/weekly/monthly 重置,§4.6,ersub_quota_srv (in billing_srv),P2-12 P4-04,P0,M,TODO
 P4-07,4-管理安全,管理,公告系统,announcements + announcement_reads 表、CRUD API、已读追踪,§4.17,ersub_announcement_handler.erl,P1-11,P2,M,TODO
-P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_reads DDL,§5.2,006_announcements.sql,P1-05,P2,S,TODO
+P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_reads DDL,§5.2,006_announcements.sql,P1-05,P2,S,DONE
 P4-09,4-管理安全,数据库,软删除基础设施,deleted_at 字段、partial unique index、find_active 查询包装,§4.22,ersub_repo.erl,P1-11,P1,M,TODO
 P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,DONE
 P4-11,4-管理安全,安全,CORS 中间件,可配置 allowed_origins、OPTIONS 预检短路、credentials 支持,§4.16,ersub_cors_middleware.erl,P1-02,P1,M,DONE
@@ -88,14 +88,14 @@ P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,scheme 强制、主机�
 P4-13,4-管理安全,审核,内容审核服务,ersub_moderation_srv：off/observe/pre_block 三模式、OpenAI API 调用,§4.7,ersub_moderation_srv.erl,P1-02,P2,L,TODO
 P4-14,4-管理安全,审核,内容审核 worker pool,poolboy 异步 worker、SHA256 去重缓存、13类风险评分,§4.7,ersub_moderation_worker.erl ersub_moderation_cache.erl,P4-13,P2,M,TODO
 P4-15,4-管理安全,审核,自动封号,违规次数阈值检查、时间窗口、用户 is_banned 标记,§4.7,ersub_moderation_srv.erl,P4-14,P2,S,TODO
-P4-16,4-管理安全,审核,审核表 migration,moderation_logs DDL（含 content_hash、categories、action_taken）,§5.2,007_moderation.sql,P1-05,P2,S,TODO
+P4-16,4-管理安全,审核,审核表 migration,moderation_logs DDL（含 content_hash、categories、action_taken）,§5.2,007_moderation.sql,P1-05,P2,S,DONE
 P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_size 校验,§3.3,ersub_security_middleware.erl,P1-02,P1,S,DONE
 P4-18,4-管理安全,前端,前端集成,sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler,§7,priv/static/,P1-02,P1,M,TODO
 P4-T1,4-管理安全,测试,URL 校验单元测试,SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单,§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,TODO
 P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,TODO
 P4-T3,4-管理安全,测试,内容审核集成测试,三模式切换、去重缓存、自动封号触发,§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,TODO
 P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),任意 IP + CIDR 匹配一致性,§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,TODO
-P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析,§6.2,ersub_auth_srv.erl,P1-03,P0,M,TODO
+P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析,§6.2,ersub_auth_srv.erl,P1-03,P0,M,DONE
 P5-02,5-运营,认证,OAuth 登录流程,GitHub/Google OAuth2 redirect → callback → JWT 签发,§6.2,ersub_auth_srv.erl,P5-01,P1,L,TODO
 P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,TODO
 P5-04,5-运营,认证,Pending auth sessions,pending_auth_sessions 表、identity_adoption_decisions、OAuth 注册流程,§6.2,ersub_auth_srv.erl,P5-02,P2,M,TODO
