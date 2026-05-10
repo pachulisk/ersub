@@ -33,9 +33,9 @@ routes() ->
 
 start_listener() ->
     Dispatch = cowboy_router:compile(routes()),
-    Host = get_config(server_host, "0.0.0.0"),
-    Port = get_config(server_port, 8080),
-    MaxConns = get_config(server_max_connections, 10000),
+    Host = ersub_config_srv:get(server_host, "0.0.0.0"),
+    Port = ersub_config_srv:get(server_port, 8080),
+    MaxConns = ersub_config_srv:get(server_max_connections, 10000),
     TransportOpts = #{
         socket_opts => [{ip, parse_ip(Host)}, {port, Port}],
         num_acceptors => 100,
@@ -64,11 +64,6 @@ stop_listener() ->
     cowboy:stop_listener(ersub_http_listener).
 
 %%% Internal
-
-get_config(Key, Default) ->
-    try persistent_term:get({ersub_config, Key})
-    catch error:badarg -> Default
-    end.
 
 parse_ip(Host) when is_list(Host) ->
     case inet:parse_address(Host) of
