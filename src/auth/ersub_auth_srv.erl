@@ -33,7 +33,7 @@ generate_jwt(Claims) ->
 verify_jwt(Token) ->
     Secret = get_jwt_secret(),
     Jwk = jose_jwk:from_oct(Secret),
-    case jose_jwt:verify(Jwk, Token) of
+    try jose_jwt:verify(Jwk, Token) of
         {true, {jose_jwt, Claims}, _Jws} ->
             Now = erlang:system_time(second),
             Exp = maps:get(<<"exp">>, Claims, 0),
@@ -43,6 +43,9 @@ verify_jwt(Token) ->
             end;
         {false, _, _} ->
             {error, invalid_signature}
+    catch
+        _:_ ->
+            {error, invalid_token}
     end.
 
 %% Hash a password using SHA-256 with salt (simple for MVP).

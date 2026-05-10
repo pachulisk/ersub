@@ -44,7 +44,10 @@ url_validation_test_() ->
     {setup,
      fun() ->
          application:ensure_all_started(yamerl),
-         {ok, _} = ersub_config_srv:start_link("config/ersub.yaml")
+         case whereis(ersub_config_srv) of
+             undefined -> {ok, _} = ersub_config_srv:start_link("config/ersub.yaml");
+             _ -> ok
+         end
      end,
      fun(_) -> ok end,
      [
