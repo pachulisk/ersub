@@ -39,7 +39,45 @@ handle_post(Req0, State) ->
     end.
 
 handle_authenticated(Req0, State, AuthCtx) ->
-    %% 3. Read request body
+    #{user_id := UserId, key_rpm_limit := KeyRpm, user_rpm_limit := UserRpm,
+      key_id := _KeyId, user_max_concurrency := MaxConc} = AuthCtx,
+
+    %% 3. Rate limit check
+    EffectiveRpm = effective_rpm(KeyRpm, UserRpm),
+    case ersub_rate_limiter:check_rpm(user, UserId, EffectiveRpm) of
+        {error, rate_limited} ->
+            Req = reply_json(429, #{error => #{
+                type => <<"rate_limit_error">>,
+                message => <<"Rate limit exceeded">>
+            }}, Req0),
+            {ok, Req, State};
+        ok ->
+            %% 4. Concurrency check
+            EffectiveConc = case maps:get(key_max_concurrency, AuthCtx) of
+                null -> MaxConc;
+                undefined -> MaxConc;
+                KC when is_integer(KC), KC > 0 -> KC;
+                _ -> MaxConc
+            end,
+            case ersub_concurrency_srv:acquire(UserId, EffectiveConc) of
+                {rejected, queue_full} ->
+                    Req = reply_json(429, #{error => #{
+                        type => <<"rate_limit_error">>,
+                        message => <<"Too many concurrent requests">>
+                    }}, Req0),
+                    {ok, Req, State};
+                {ok, ConcRef} ->
+                    try
+                        do_request_pipeline(Req0, State, AuthCtx)
+                    after
+                        ersub_concurrency_srv:release(UserId, ConcRef)
+                    end
+            end
+    end.
+
+do_request_pipeline(Req0, State, AuthCtx) ->
+    #{user_id := UserId} = AuthCtx,
+    %% 5. Read request body
     case read_body(Req0) of
         {error, Req1} ->
             Req = reply_json(400, #{error => #{
@@ -57,22 +95,36 @@ handle_authenticated(Req0, State, AuthCtx) ->
                     {ok, Req, State};
                 true ->
                     Parsed = jsx:decode(Body, [return_maps]),
-                    forward_to_upstream(Req1, State, AuthCtx, Parsed, Body)
+                    %% 6. Balance pre-check
+                    case ersub_billing_srv:check_balance(UserId, 0.001) of
+                        {error, insufficient_balance} ->
+                            Req = reply_json(402, #{error => #{
+                                type => <<"billing_error">>,
+                                message => <<"Insufficient balance">>
+                            }}, Req1),
+                            {ok, Req, State};
+                        ok ->
+                            %% 7. Select account via scheduler with failover
+                            Model = maps:get(<<"model">>, Parsed, <<>>),
+                            SessionHash = compute_session_hash(Parsed),
+                            SchedulerReq = #{
+                                user_id => UserId,
+                                platform => <<"claude">>,
+                                session_hash => SessionHash,
+                                model => Model
+                            },
+                            case ersub_scheduler_srv:select_account(SchedulerReq) of
+                                {error, no_available_account} ->
+                                    Req = reply_json(503, #{error => #{
+                                        type => <<"api_error">>,
+                                        message => <<"No upstream accounts available">>
+                                    }}, Req1),
+                                    {ok, Req, State};
+                                {ok, Account} ->
+                                    do_forward(Req1, State, Account, Parsed, Body)
+                            end
+                    end
             end
-    end.
-
-forward_to_upstream(Req0, State, _AuthCtx, Parsed, OrigBody) ->
-    %% For MVP: pick the first active account and forward directly
-    %% TODO: integrate with scheduler service (P2-06)
-    case get_upstream_account() of
-        {error, no_account} ->
-            Req = reply_json(503, #{error => #{
-                type => <<"api_error">>,
-                message => <<"No upstream accounts available">>
-            }}, Req0),
-            {ok, Req, State};
-        {ok, Account} ->
-            do_forward(Req0, State, Account, Parsed, OrigBody)
     end.
 
 do_forward(Req0, State, Account, Parsed, OrigBody) ->
@@ -260,18 +312,6 @@ await_body(ConnPid, StreamRef, MRef, Status, Headers, Acc) ->
 
 %%% Helpers
 
-get_upstream_account() ->
-    case ersub_repo:list_accounts(#{status => <<"active">>}) of
-        {ok, [Account | _]} ->
-            %% Fetch full account with credentials
-            ersub_repo:get_account(maps:get(id, Account));
-        {ok, []} ->
-            {error, no_account};
-        {error, Reason} ->
-            logger:error("Failed to list accounts: ~p", [Reason]),
-            {error, no_account}
-    end.
-
 check_ip_access(Req, AuthCtx) ->
     #{ip_whitelist := WL, ip_blacklist := BL} = AuthCtx,
     case {WL, BL} of
@@ -331,6 +371,25 @@ filter_response_headers(Headers) ->
     maps:filter(fun(K, _V) ->
         lists:member(string:lowercase(K), Allowed)
     end, Headers).
+
+effective_rpm(null, null) -> 0;
+effective_rpm(undefined, undefined) -> 0;
+effective_rpm(null, UserRpm) -> UserRpm;
+effective_rpm(undefined, UserRpm) -> UserRpm;
+effective_rpm(KeyRpm, _) when is_integer(KeyRpm), KeyRpm > 0 -> KeyRpm;
+effective_rpm(_, UserRpm) when is_integer(UserRpm), UserRpm > 0 -> UserRpm;
+effective_rpm(_, _) -> 0.
+
+compute_session_hash(Parsed) ->
+    SystemPrompt = maps:get(<<"system">>, Parsed, <<>>),
+    Messages = maps:get(<<"messages">>, Parsed, []),
+    FirstMsg = case Messages of
+        [#{<<"content">> := C} | _] when is_binary(C) -> C;
+        [#{<<"content">> := C} | _] when is_list(C) -> jsx:encode(C);
+        _ -> <<>>
+    end,
+    Data = <<SystemPrompt/binary, FirstMsg/binary>>,
+    binary:encode_hex(crypto:hash(sha256, Data)).
 
 parse_url(Url) when is_binary(Url) ->
     parse_url(binary_to_list(Url));
