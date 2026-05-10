@@ -1,0 +1,22 @@
+[Unit]
+Description=ErSub AI API Gateway
+After=postgresql.service network.target
+
+[Service]
+Type=exec
+User=ersub
+Group=ersub
+WorkingDirectory=/opt/ersub
+ExecStart=/opt/ersub/bin/ersub foreground
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/opt/ersub
+
+# Security
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/ersub/data
+
+[Install]
+WantedBy=multi-user.target
