@@ -9,10 +9,10 @@ routes() ->
             %% Gateway endpoints
             {"/v1/messages", ersub_claude_handler, []},
             {"/openai/v1/chat/completions", ersub_openai_handler, []},
-            {"/openai/v1/responses", Stub, []},
-            {"/openai/v1/images/generations", Stub, []},
-            {"/gemini/v1beta/[...]", Stub, []},
-            {"/antigravity/v1/messages", Stub, []},
+            {"/openai/v1/responses", ersub_openai_responses_handler, []},
+            {"/openai/v1/images/generations", ersub_openai_images_handler, []},
+            {"/gemini/v1beta/[...]", ersub_gemini_handler, []},
+            {"/antigravity/v1/messages", Stub, []},  %% P3-05
 
             %% Management API (stubs until implemented)
             {"/api/user/[...]", ersub_user_handler, []},
