@@ -18,3 +18,5 @@ priv/static/*
 !priv/static/.gitkeep
 data/
 .installed
+priv/ersub_clips
+c_src/clips_lib/

@@ -68,7 +68,7 @@ P3-15,3-多平台,安全,Claude Code 客户端检测,User-Agent 校验 claude-cl
 P3-16,3-多平台,网关,Cache Control 注入,prompt caching 标识检查、cache_control block 注入请求体,§3.3,ersub_request_transform.erl,P3-08,P2,M,TODO
 P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
 P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group model pattern→account list 映射,§2.4,priv/clips/model_routing.clp,P1-15,P1,M,TODO
-P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,TODO
+P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,DONE
 P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,TODO
 P3-T3,3-多平台,测试,Claude Code 检测单元测试,UA 格式、大小写、metadata originator、codex_cli_only 限制,§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,DONE
 P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复合 key 缓存,§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,TODO
@@ -99,24 +99,24 @@ P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、
 P5-02,5-运营,认证,OAuth 登录流程,GitHub/Google OAuth2 redirect → callback → JWT 签发,§6.2,ersub_auth_srv.erl,P5-01,P1,L,TODO
 P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,TODO
 P5-04,5-运营,认证,Pending auth sessions,pending_auth_sessions 表、identity_adoption_decisions、OAuth 注册流程,§6.2,ersub_auth_srv.erl,P5-02,P2,M,TODO
-P5-05,5-运营,认证,auth_identities 表 migration,auth_identities DDL + pending sessions,§5.2,008_auth.sql,P1-05,P1,S,TODO
+P5-05,5-运营,认证,auth_identities 表 migration,auth_identities DDL + pending sessions,§5.2,008_auth.sql,P1-05,P1,S,DONE
 P5-06,5-运营,支付,支付订单管理,payment_orders 表、订单生命周期（pending→paid→fulfilled）,§5.2,ersub_payment_srv.erl,P1-11,P1,M,TODO
 P5-07,5-运营,支付,Stripe 集成,Stripe checkout session 创建、webhook 处理、订单确认,§4.34,ersub_stripe.erl,P5-06,P2,L,TODO
 P5-08,5-运营,支付,Alipay 集成,支付宝支付创建、异步回调处理,§4.34,ersub_alipay.erl,P5-06,P2,L,TODO
 P5-09,5-运营,支付,WeChat Pay 集成,微信支付创建、回调处理,§4.34,ersub_wechat.erl,P5-06,P2,L,TODO
 P5-10,5-运营,支付,支付负载均衡,多服务商实例配置、权重分配、payment_provider_instances 表,§5.2,ersub_payment_srv.erl,P5-06,P2,M,TODO
-P5-11,5-运营,支付,支付审计日志,payment_audit_logs 表、幂等性保证,§5.2,009_payment.sql,P1-05,P2,S,TODO
-P5-12,5-运营,支付,支付表 migration,payment_orders + payment_provider_instances + payment_audit_logs DDL,§5.2,009_payment.sql,P1-05,P1,S,TODO
+P5-11,5-运营,支付,支付审计日志,payment_audit_logs 表、幂等性保证,§5.2,009_payment.sql,P1-05,P2,S,DONE
+P5-12,5-运营,支付,支付表 migration,payment_orders + payment_provider_instances + payment_audit_logs DDL,§5.2,009_payment.sql,P1-05,P1,S,DONE
 P5-13,5-运营,运营,兑换码系统,redeem_codes 表、兑换 API、余额充值,§4.24,ersub_redeem_handler.erl,P1-11,P2,M,TODO
 P5-14,5-运营,运营,促销码系统,promo_codes + promo_code_usage 表、折扣计算、使用限制,§4.24,ersub_promo_handler.erl,P1-11,P2,M,TODO
-P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_codes + promo_code_usage DDL,§5.2,010_redeem_promo.sql,P1-05,P2,S,TODO
+P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_codes + promo_code_usage DDL,§5.2,010_redeem_promo.sql,P1-05,P2,S,DONE
 P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,TODO
-P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,TODO
+P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,DONE
 P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,TODO
 P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
 P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,TODO
-P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,TODO
-P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,TODO
+P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,DONE
+P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,DONE
 P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
 P5-T2,5-运营,测试,支付集成测试,webhook 处理、订单状态转换、审计日志,§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,TODO
 P5-T3,5-运营,测试,返佣单元测试,返佣计算、冻结/解冻、ledger 记录,§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,TODO
@@ -126,29 +126,29 @@ P6-03,6-生产,WebSocket,WebSocket RateLimit 信号,WS 帧中的 RateLimit 信�
 P6-04,6-生产,代理,代理管理服务,ersub_proxy_srv：代理 CRUD、协议支持（HTTP/HTTPS/SOCKS5）,§4.25,ersub_proxy_srv.erl,P1-11,P2,M,TODO
 P6-05,6-生产,代理,代理延迟探测,定时 probe、延迟缓存、不健康代理标记,§4.25,ersub_proxy_srv.erl,P6-04,P2,M,TODO
 P6-06,6-生产,代理,TLS 指纹伪装,tls_fingerprint_profiles 表/配置、JA3 hash、请求头伪装,§4.25,ersub_proxy_srv.erl,P6-04,P3,M,TODO
-P6-07,6-生产,代理,代理/TLS 表 migration,proxies + tls_fingerprint_profiles DDL,§5.2,013_proxy_tls.sql,P1-05,P2,S,TODO
+P6-07,6-生产,代理,代理/TLS 表 migration,proxies + tls_fingerprint_profiles DDL,§5.2,013_proxy_tls.sql,P1-05,P2,S,DONE
 P6-08,6-生产,健康检测,定时健康检测服务,ersub_scheduled_test_srv：定时请求、结果记录、auto_recover,§4.26,ersub_scheduled_test_srv.erl,P2-03,P2,L,TODO
-P6-09,6-生产,健康检测,健康检测表 migration,scheduled_tests DDL,§5.2,014_scheduled_tests.sql,P1-05,P2,S,TODO
+P6-09,6-生产,健康检测,健康检测表 migration,scheduled_tests DDL,§5.2,014_scheduled_tests.sql,P1-05,P2,S,DONE
 P6-10,6-生产,监控,Channel 监控 runner,ersub_channel_monitor_runner：定时触发检查,§4.27,ersub_channel_monitor_runner.erl,P3-06,P2,M,TODO
 P6-11,6-生产,监控,Channel 监控 checker,执行检查请求、记录结果到 histories 表,§4.27,ersub_channel_monitor_checker.erl,P6-10,P2,M,TODO
 P6-12,6-生产,监控,Channel 监控日聚合,daily_rollups 计算、成功率/延迟统计,§4.27,ersub_channel_monitor_aggregator.erl,P6-11,P2,M,TODO
-P6-13,6-生产,监控,Channel 监控表 migration,channel_monitors + histories + daily_rollups + request_templates DDL,§5.2,015_channel_monitor.sql,P1-05,P2,S,TODO
+P6-13,6-生产,监控,Channel 监控表 migration,channel_monitors + histories + daily_rollups + request_templates DDL,§5.2,015_channel_monitor.sql,P1-05,P2,S,DONE
 P6-14,6-生产,告警,Ops 告警评估器,ersub_ops_alert_srv：规则评估、severity 分级、通知发送,§4.33,ersub_ops_alert_srv.erl,P1-01,P2,L,TODO
 P6-15,6-生产,告警,告警静默规则,ops_alert_silences：静默期管理,§4.33,ersub_ops_alert_srv.erl,P6-14,P2,S,TODO
-P6-16,6-生产,告警,告警表 migration,ops_alert_rules + ops_alert_silences DDL,§5.2,016_ops_alerts.sql,P1-05,P2,S,TODO
+P6-16,6-生产,告警,告警表 migration,ops_alert_rules + ops_alert_silences DDL,§5.2,016_ops_alerts.sql,P1-05,P2,S,DONE
 P6-17,6-生产,CLIPS,规则热更新 API,POST /api/admin/clips/reload：滚动更新 worker pool 中的规则,§8.2,ersub_admin_handler.erl,P1-14,P1,M,TODO
 P6-18,6-生产,可观测性,健康评分服务,ersub_health_srv：多维健康评分（DB/CLIPS/upstream）、0-100 分,§4.18,ersub_health_srv.erl,P1-21,P2,M,TODO
 P6-19,6-生产,可观测性,指标聚合服务,ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度,§4.18,ersub_metrics_srv.erl,P2-13,P2,L,TODO
-P6-20,6-生产,可观测性,指标聚合表 migration,metrics_aggregated DDL + 索引,§5.2,017_metrics.sql,P1-05,P2,S,TODO
+P6-20,6-生产,可观测性,指标聚合表 migration,metrics_aggregated DDL + 索引,§5.2,017_metrics.sql,P1-05,P2,S,DONE
 P6-21,6-生产,可观测性,使用记录定时清理,ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时,§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,TODO
 P6-22,6-生产,可观测性,Ops 系统日志,ops_system_logs 表、结构化日志 sink,§4.18,ersub_ops_system_log.erl,P1-11,P3,M,TODO
-P6-23,6-生产,可观测性,系统日志表 migration,ops_system_logs DDL,§5.2,018_ops_logs.sql,P1-05,P3,S,TODO
+P6-23,6-生产,可观测性,系统日志表 migration,ops_system_logs DDL,§5.2,018_ops_logs.sql,P1-05,P3,S,DONE
 P6-24,6-生产,定价,定价表自动更新,ersub_pricing_srv：LiteLLM JSON 解析、定时拉取、内嵌 fallback,§4.20,ersub_pricing_srv.erl,P1-03,P1,L,TODO
 P6-25,6-生产,定价,内嵌定价 fallback,priv/pricing/model_prices.json 编译时打包,§4.20,priv/pricing/model_prices.json,P6-24,P1,S,TODO
 P6-26,6-生产,计费,使用计费去重,usage_billing_dedup 表、request_id 检查、定期归档,§4.32,ersub_billing_srv.erl,P2-12,P2,M,TODO
-P6-27,6-生产,计费,去重表 migration,usage_billing_dedup + usage_billing_dedup_archive DDL,§5.2,019_billing_dedup.sql,P1-05,P2,S,TODO
+P6-27,6-生产,计费,去重表 migration,usage_billing_dedup + usage_billing_dedup_archive DDL,§5.2,019_billing_dedup.sql,P1-05,P2,S,DONE
 P6-28,6-生产,安全,安全密钥存储,security_secrets 表、加密存储、CRUD API,§5.2,ersub_admin_handler.erl,P1-11,P3,M,TODO
-P6-29,6-生产,安全,安全密钥表 migration,security_secrets DDL,§5.2,020_security_secrets.sql,P1-05,P3,S,TODO
+P6-29,6-生产,安全,安全密钥表 migration,security_secrets DDL,§5.2,020_security_secrets.sql,P1-05,P3,S,DONE
 P6-30,6-生产,管理,账户批量导入,POST /api/admin/accounts/import：JSON 批量导入、校验、去重,§4.35,ersub_admin_handler.erl,P1-11,P3,M,TODO
 P6-31,6-生产,部署,Dockerfile,多阶段构建：Erlang 编译 + CLIPS 编译 + 前端构建 + release,§10.3,deploy/Dockerfile,P1-01,P1,M,TODO
 P6-32,6-生产,部署,docker-compose.yml,ersub + PostgreSQL 服务编排、volume 映射,§10.3,deploy/docker-compose.yml,P6-31,P1,S,TODO
