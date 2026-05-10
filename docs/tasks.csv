@@ -21,9 +21,9 @@ P1-19,1-MVP,网关,请求转换基础,model 名称透传、system prompt 保留�
 P1-20,1-MVP,运维,Setup Wizard,首次运行检测 (.installed)、交互式 DB/admin/server 配置、config 生成,§4.19,ersub_setup.erl,P1-03 P1-05,P1,M,DONE
 P1-21,1-MVP,运维,健康检查端点,GET /health 端点、DB 连通性检查、CLIPS pool 存活检查,§3.1,ersub_health_handler.erl,P1-02 P1-04 P1-14,P1,S,DONE
 P1-T1,1-MVP,测试,测试基础设施,eunit/CT 配置、ersub_test_helpers、ersub_test_db（Docker PostgreSQL + 事务隔离）,§13.2 §13.3 §13.5,test/support/,P1-04,P0,M,DONE
-P1-T2,1-MVP,测试,CLIPS Port 测试,CLIPS worker 生命周期、NDJSON 通信、规则加载验证,§13.5,test/integration/ersub_clips_SUITE.erl,P1-14 P1-T1,P0,M,TODO
+P1-T2,1-MVP,测试,CLIPS Port 测试,CLIPS worker 生命周期、NDJSON 通信、规则加载验证,§13.5,test/integration/ersub_clips_SUITE.erl,P1-14 P1-T1,P0,M,DONE
 P1-T3,1-MVP,测试,IP/CIDR 单元测试,表驱动测试：白名单、黑名单、CIDR 匹配、边界情况,§13.4,test/unit/ersub_ip_access_tests.erl,P1-17,P1,S,DONE
-P1-T4,1-MVP,测试,Repository 集成测试,users/accounts/api_keys CRUD 事务隔离测试、级联删除,§13.5,test/integration/ersub_repo_SUITE.erl,P1-11 P1-T1,P0,M,TODO
+P1-T4,1-MVP,测试,Repository 集成测试,users/accounts/api_keys CRUD 事务隔离测试、级联删除,§13.5,test/integration/ersub_repo_SUITE.erl,P1-11 P1-T1,P0,M,DONE
 P1-T5,1-MVP,测试,测试数据工厂,must_create_user/account/group/api_key fixture 函数,§13.9,test/support/ersub_test_fixtures.erl,P1-T1,P0,S,DONE
 P2-01,2-核心,流式,SSE 流式响应状态机,gen_statem 实现：idle→connecting→streaming→done、SSE 解析、token 累计,§4.5,ersub_stream_fsm.erl,P1-18,P0,XL,DONE
 P2-02,2-核心,流式,流式 ping 机制,等待并发槽时发送 SSE ping、指数退避 + jitter,§4.3 §4.5,ersub_stream_fsm.erl,P2-01,P1,S,DONE
@@ -45,11 +45,11 @@ P2-17,2-核心,连接池,上游连接池管理,ersub_upstream_pool：gun 连接�
 P2-18,2-核心,网关,Claude handler 完整版,集成调度→并发→计费→流式→failover 完整管道,§3.3,ersub_claude_handler.erl,P2-01 P2-06 P2-12 P2-15,P0,XL,DONE
 P2-T1,2-核心,测试,调度器单元测试,评分算法正确性、top-k 选择、排除列表,§13.4,test/unit/ersub_scheduler_tests.erl,P2-05 P2-06,P0,M,DONE
 P2-T2,2-核心,测试,计费单元测试,token/per_request/image 三模式、tier 乘数、长上下文、rate_multiplier=0,§13.4,test/unit/ersub_billing_tests.erl,P2-09 P2-10 P2-11,P0,M,DONE
-P2-T3,2-核心,测试,并发控制集成测试,槽获取/释放、等待队列、process 崩溃自动释放、队列满拒绝,§13.5,test/integration/ersub_concurrency_SUITE.erl,P2-15,P0,M,TODO
-P2-T4,2-核心,测试,会话粘滞集成测试,ETS TTL 过期、命中刷新、账户不兼容清理,§13.5,test/integration/ersub_session_SUITE.erl,P2-08,P1,S,TODO
-P2-T5,2-核心,测试,CLIPS 调度集成测试,候选账户评分、并发请求隔离、规则热更新,§13.5,test/integration/ersub_clips_SUITE.erl,P2-05,P0,M,TODO
-P2-T6,2-核心,测试,计费属性测试 (PropEr),非负性、rate_multiplier=0 成本为 0、priority 2x 一致性,§13.7,test/property/ersub_billing_prop.erl,P2-09,P1,M,TODO
-P2-T7,2-核心,测试,CLIPS 性能基准,Port 调用延迟测量、并发吞吐量,§13.8,test/bench/ersub_clips_bench.erl,P1-14,P2,S,TODO
+P2-T3,2-核心,测试,并发控制集成测试,槽获取/释放、等待队列、process 崩溃自动释放、队列满拒绝,§13.5,test/integration/ersub_concurrency_SUITE.erl,P2-15,P0,M,DONE
+P2-T4,2-核心,测试,会话粘滞集成测试,ETS TTL 过期、命中刷新、账户不兼容清理,§13.5,test/integration/ersub_session_SUITE.erl,P2-08,P1,S,DONE
+P2-T5,2-核心,测试,CLIPS 调度集成测试,候选账户评分、并发请求隔离、规则热更新,§13.5,test/integration/ersub_clips_SUITE.erl,P2-05,P0,M,DONE
+P2-T6,2-核心,测试,计费属性测试 (PropEr),非负性、rate_multiplier=0 成本为 0、priority 2x 一致性,§13.7,test/property/ersub_billing_prop.erl,P2-09,P1,M,DONE
+P2-T7,2-核心,测试,CLIPS 性能基准,Port 调用延迟测量、并发吞吐量,§13.8,test/bench/ersub_clips_bench.erl,P1-14,P2,S,DONE
 P3-01,3-多平台,网关,OpenAI Chat Completions handler,POST /openai/v1/chat/completions、格式转换、流式兼容,§6.1,ersub_openai_handler.erl,P2-18,P0,L,DONE
 P3-02,3-多平台,网关,OpenAI Responses handler,POST /openai/v1/responses (Codex CLI)、状态管理,§6.1,ersub_openai_responses_handler.erl,P3-01,P1,L,DONE
 P3-03,3-多平台,网关,OpenAI Images handler,POST /openai/v1/images/generations、图片并发限制、成本追踪,§6.1,ersub_openai_images_handler.erl,P3-01 P2-11,P1,M,DONE
@@ -71,8 +71,8 @@ P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group mod
 P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,DONE
 P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,DONE
 P3-T3,3-多平台,测试,Claude Code 检测单元测试,UA 格式、大小写、metadata originator、codex_cli_only 限制,§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,DONE
-P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复合 key 缓存,§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,TODO
-P3-T5,3-多平台,测试,Token 刷新集成测试,定时触发、401 触发、cooldown、缓存失效链,§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,TODO
+P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复合 key 缓存,§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,DONE
+P3-T5,3-多平台,测试,Token 刷新集成测试,定时触发、401 触发、cooldown、缓存失效链,§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,DONE
 P4-01,4-管理安全,管理,用户管理 API,GET/PUT /api/user/profile、余额历史、密码修改、2FA 开关,§6.1,ersub_user_handler.erl,P1-11 P1-16,P0,L,DONE
 P4-02,4-管理安全,管理,Admin 管理 API,用户/账户/分组 CRUD、使用统计、仪表盘、设置管理,§6.1,ersub_admin_handler.erl,P1-11 P1-16,P0,XL,DONE
 P4-03,4-管理安全,管理,API Key 管理 API,GET/POST/PUT/DELETE /api/keys、key 生成 (hash+prefix),§6.1,ersub_keys_handler.erl,P1-11,P0,M,DONE
@@ -93,8 +93,8 @@ P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_si
 P4-18,4-管理安全,前端,前端集成,sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler,§7,priv/static/,P1-02,P1,M,DONE
 P4-T1,4-管理安全,测试,URL 校验单元测试,SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单,§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,DONE
 P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,DONE
-P4-T3,4-管理安全,测试,内容审核集成测试,三模式切换、去重缓存、自动封号触发,§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,TODO
-P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),任意 IP + CIDR 匹配一致性,§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,TODO
+P4-T3,4-管理安全,测试,内容审核集成测试,三模式切换、去重缓存、自动封号触发,§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,DONE
+P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),任意 IP + CIDR 匹配一致性,§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,DONE
 P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析,§6.2,ersub_auth_srv.erl,P1-03,P0,M,DONE
 P5-02,5-运营,认证,OAuth 登录流程,GitHub/Google OAuth2 redirect → callback → JWT 签发,§6.2,ersub_auth_srv.erl,P5-01,P1,L,DONE
 P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,DONE
@@ -117,8 +117,8 @@ P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/
 P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,DONE
 P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,DONE
 P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,DONE
-P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
-P5-T2,5-运营,测试,支付集成测试,webhook 处理、订单状态转换、审计日志,§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,TODO
+P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,DONE
+P5-T2,5-运营,测试,支付集成测试,webhook 处理、订单状态转换、审计日志,§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,DONE
 P5-T3,5-运营,测试,返佣单元测试,返佣计算、冻结/解冻、ledger 记录,§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,DONE
 P6-01,6-生产,WebSocket,WebSocket v2 handler,cowboy_websocket behaviour、帧级双向中继、协议版本检测,§4.21,ersub_openai_ws_handler.erl,P3-01,P1,XL,DONE
 P6-02,6-生产,WebSocket,WebSocket 连接池,per-account WS 连接池、min/max idle、idle timeout,§4.21,ersub_openai_ws_handler.erl,P6-01,P1,M,DONE
@@ -155,12 +155,12 @@ P6-32,6-生产,部署,docker-compose.yml,ersub + PostgreSQL 服务编排、volum
 P6-33,6-生产,部署,Systemd 服务配置,ersub.service unit 文件,§10.4,deploy/ersub.service,P1-01,P2,S,DONE
 P6-34,6-生产,部署,Release 构建配置,rebar3 release profile、vm.args 生产参数、BEAM 调优,§10.1,rebar.config config/vm.args,P1-01,P1,M,DONE
 P6-35,6-生产,测试,模拟上游服务器,ersub_mock_upstream：本地 Cowboy 模拟 Claude/OpenAI API,§13.10,test/support/ersub_mock_upstream.erl,P1-02,P1,M,DONE
-P6-T1,6-生产,测试,E2E 网关测试 — Claude,Claude /v1/messages 流式/非流式、SSE event 序列验证,§13.6,test/e2e/ersub_gateway_SUITE.erl,P2-18 P6-35,P1,L,TODO
-P6-T2,6-生产,测试,E2E 网关测试 — OpenAI,OpenAI /v1/chat/completions 流式/非流式,§13.6,test/e2e/ersub_openai_SUITE.erl,P3-01 P6-35,P1,M,TODO
-P6-T3,6-生产,测试,E2E 网关测试 — Gemini,Gemini /v1beta/* 端点验证,§13.6,test/e2e/ersub_gemini_SUITE.erl,P3-04 P6-35,P2,M,TODO
-P6-T4,6-生产,测试,上游连接池集成测试,三种隔离策略、LRU 驱逐、inFlight 计数,§13.5,test/integration/ersub_upstream_pool_SUITE.erl,P2-17,P1,M,TODO
-P6-T5,6-生产,测试,调度器属性测试 (PropEr),任意账户状态下的调度收敛性,§13.7,test/property/ersub_scheduler_prop.erl,P2-06,P2,M,TODO
+P6-T1,6-生产,测试,E2E 网关测试 — Claude,Claude /v1/messages 流式/非流式、SSE event 序列验证,§13.6,test/e2e/ersub_gateway_SUITE.erl,P2-18 P6-35,P1,L,DONE
+P6-T2,6-生产,测试,E2E 网关测试 — OpenAI,OpenAI /v1/chat/completions 流式/非流式,§13.6,test/e2e/ersub_openai_SUITE.erl,P3-01 P6-35,P1,M,DONE
+P6-T3,6-生产,测试,E2E 网关测试 — Gemini,Gemini /v1beta/* 端点验证,§13.6,test/e2e/ersub_gemini_SUITE.erl,P3-04 P6-35,P2,M,DONE
+P6-T4,6-生产,测试,上游连接池集成测试,三种隔离策略、LRU 驱逐、inFlight 计数,§13.5,test/integration/ersub_upstream_pool_SUITE.erl,P2-17,P1,M,DONE
+P6-T5,6-生产,测试,调度器属性测试 (PropEr),任意账户状态下的调度收敛性,§13.7,test/property/ersub_scheduler_prop.erl,P2-06,P2,M,DONE
 P6-T6,6-生产,测试,Makefile 测试 targets,test-unit / test-integration / test-e2e / test-property / bench / cover / dialyzer,§13.11,Makefile,P1-01,P1,S,DONE
 P6-T7,6-生产,测试,GitHub Actions CI,unit + integration + property + lint (dialyzer+xref) jobs,§13.11,.github/workflows/ci.yml,P6-T6,P1,M,DONE
 P6-T8,6-生产,测试,RPM 限速单元测试,滑动窗口正确性、多级限速、fail-open/close,§13.4,test/unit/ersub_rate_limiter_tests.erl,P2-16,P1,S,DONE
-P6-T9,6-生产,测试,ETS 性能基准,ETS 读写性能、并发负载,§13.8,test/bench/ersub_ets_bench.erl,P1-01,P3,S,TODO
+P6-T9,6-生产,测试,ETS 性能基准,ETS 读写性能、并发负载,§13.8,test/bench/ersub_ets_bench.erl,P1-01,P3,S,DONE
