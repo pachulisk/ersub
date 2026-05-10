@@ -54,6 +54,11 @@ init([]) ->
         #{id => ersub_upstream_pool,
           start => {ersub_upstream_pool, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_billing_srv,
+          start => {ersub_billing_srv, start_link, []},
+          restart => permanent,
           type => worker}
 
         %% Children added as modules are implemented:
