@@ -44,6 +44,16 @@ init([]) ->
         #{id => ersub_rate_limiter,
           start => {ersub_rate_limiter, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_platform_sup,
+          start => {ersub_platform_sup, start_link, []},
+          restart => permanent,
+          type => supervisor},
+
+        #{id => ersub_upstream_pool,
+          start => {ersub_upstream_pool, start_link, []},
+          restart => permanent,
           type => worker}
 
         %% Children added as modules are implemented:

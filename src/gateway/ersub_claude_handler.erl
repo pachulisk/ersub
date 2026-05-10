@@ -98,12 +98,7 @@ do_forward(Req0, State, Account, Parsed, OrigBody) ->
 
     case IsStream of
         true ->
-            %% TODO: P2-01 streaming support
-            Req = reply_json(501, #{error => #{
-                type => <<"api_error">>,
-                message => <<"Streaming not yet implemented, set stream=false">>
-            }}, Req0),
-            {ok, Req, State};
+            handle_streaming(Req0, State, Url, Headers, OrigBody, Account);
         _ ->
             case http_request(Url, Headers, OrigBody) of
                 {ok, Status, RespHeaders, RespBody} ->
@@ -120,7 +115,84 @@ do_forward(Req0, State, Account, Parsed, OrigBody) ->
             end
     end.
 
-%%% HTTP client
+%%% Streaming
+
+handle_streaming(Req0, State, Url, Headers, Body, Account) ->
+    ConnInfo = parse_url_to_conn_info(Url),
+    AccountId = maps:get(id, Account, 0),
+    ReqId = generate_request_id(),
+    Opts = #{account_id => AccountId, request_id => ReqId, model => <<"unknown">>},
+    case ersub_stream_fsm:start(ConnInfo, Headers, Body, Opts) of
+        {ok, FsmPid} ->
+            %% Wait for headers from FSM
+            receive
+                {stream_headers, FsmPid, _Status, RespHeaders} ->
+                    %% Send chunked response headers
+                    FilteredHeaders = filter_response_headers(maps:from_list(RespHeaders)),
+                    StreamHeaders = FilteredHeaders#{
+                        <<"content-type">> => <<"text/event-stream">>,
+                        <<"cache-control">> => <<"no-cache">>,
+                        <<"connection">> => <<"keep-alive">>
+                    },
+                    Req1 = cowboy_req:stream_reply(200, StreamHeaders, Req0),
+                    %% Stream chunks
+                    stream_loop(Req1, State, FsmPid);
+                {stream_error, FsmPid, {upstream_error, ErrStatus, _ErrHeaders, ErrBody}} ->
+                    %% Upstream returned an error — pass it through
+                    Req = cowboy_req:reply(ErrStatus,
+                        #{<<"content-type">> => <<"application/json">>},
+                        ErrBody, Req0),
+                    {ok, Req, State};
+                {stream_error, FsmPid, Reason} ->
+                    logger:error("Stream connect error: ~p", [Reason]),
+                    Req = reply_json(502, #{error => #{
+                        type => <<"api_error">>,
+                        message => <<"Upstream streaming failed">>
+                    }}, Req0),
+                    {ok, Req, State}
+            after 30000 ->
+                ersub_stream_fsm:stop(FsmPid),
+                Req = reply_json(504, #{error => #{
+                    type => <<"api_error">>,
+                    message => <<"Upstream connection timeout">>
+                }}, Req0),
+                {ok, Req, State}
+            end;
+        {error, Reason} ->
+            logger:error("Failed to start stream FSM: ~p", [Reason]),
+            Req = reply_json(502, #{error => #{
+                type => <<"api_error">>,
+                message => <<"Failed to connect to upstream">>
+            }}, Req0),
+            {ok, Req, State}
+    end.
+
+stream_loop(Req, State, FsmPid) ->
+    receive
+        {stream_chunk, FsmPid, Chunk} ->
+            cowboy_req:stream_body(Chunk, nofin, Req),
+            stream_loop(Req, State, FsmPid);
+        {stream_done, FsmPid, _Accumulated} ->
+            cowboy_req:stream_body(<<>>, fin, Req),
+            {ok, Req, State};
+        {stream_error, FsmPid, Reason} ->
+            logger:error("Mid-stream error: ~p", [Reason]),
+            cowboy_req:stream_body(<<>>, fin, Req),
+            {ok, Req, State}
+    after 600000 ->
+        cowboy_req:stream_body(<<>>, fin, Req),
+        {ok, Req, State}
+    end.
+
+parse_url_to_conn_info(Url) ->
+    {Scheme, Host, Port, Path} = parse_url(Url),
+    #{scheme => Scheme, host => Host, port => Port, path => Path}.
+
+generate_request_id() ->
+    Rand = crypto:strong_rand_bytes(8),
+    iolist_to_binary([<<"req-">>, binary:encode_hex(Rand)]).
+
+%%% HTTP client (non-streaming)
 
 http_request(Url, Headers, Body) ->
     {Scheme, Host, Port, Path} = parse_url(Url),
