@@ -3,7 +3,7 @@
 -export([routes/0, start_listener/0, stop_listener/0]).
 
 routes() ->
-    Stub = ersub_stub_handler,
+    _Stub = ersub_stub_handler,
     [
         {'_', [
             %% Gateway endpoints
@@ -12,14 +12,14 @@ routes() ->
             {"/openai/v1/responses", ersub_openai_responses_handler, []},
             {"/openai/v1/images/generations", ersub_openai_images_handler, []},
             {"/gemini/v1beta/[...]", ersub_gemini_handler, []},
-            {"/antigravity/v1/messages", Stub, []},  %% P3-05
+            {"/antigravity/v1/messages", ersub_antigravity_handler, []},
 
             %% Management API (stubs until implemented)
             {"/api/user/[...]", ersub_user_handler, []},
             {"/api/keys/[...]", ersub_keys_handler, []},
-            {"/api/usage/[...]", Stub, []},
+            {"/api/usage/[...]", ersub_user_handler, []},  %% usage routed through user handler
             {"/api/admin/[...]", ersub_admin_handler, []},
-            {"/api/payment/[...]", Stub, []},
+            {"/api/payment/[...]", ersub_payment_handler, []},
             {"/api/auth/[...]", ersub_auth_handler, []},
             {"/api/announcements/[...]", ersub_announcement_handler, []},
 

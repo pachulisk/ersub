@@ -119,7 +119,7 @@ P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attr
 P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,DONE
 P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
 P5-T2,5-运营,测试,支付集成测试,webhook 处理、订单状态转换、审计日志,§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,TODO
-P5-T3,5-运营,测试,返佣单元测试,返佣计算、冻结/解冻、ledger 记录,§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,TODO
+P5-T3,5-运营,测试,返佣单元测试,返佣计算、冻结/解冻、ledger 记录,§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,DONE
 P6-01,6-生产,WebSocket,WebSocket v2 handler,cowboy_websocket behaviour、帧级双向中继、协议版本检测,§4.21,ersub_openai_ws_handler.erl,P3-01,P1,XL,TODO
 P6-02,6-生产,WebSocket,WebSocket 连接池,per-account WS 连接池、min/max idle、idle timeout,§4.21,ersub_openai_ws_handler.erl,P6-01,P1,M,TODO
 P6-03,6-生产,WebSocket,WebSocket RateLimit 信号,WS 帧中的 RateLimit 信号检测与处理,§4.21,ersub_openai_ws_handler.erl,P6-01,P2,S,TODO
