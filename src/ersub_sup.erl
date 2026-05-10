@@ -34,6 +34,11 @@ init([]) ->
         #{id => ersub_concurrency_srv,
           start => {ersub_concurrency_srv, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_usage_logger,
+          start => {ersub_usage_logger, start_link, []},
+          restart => permanent,
           type => worker}
 
         %% Children added as modules are implemented:

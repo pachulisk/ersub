@@ -32,14 +32,14 @@ P2-04,2-核心,调度,平台 supervisor,ersub_platform_sup + per-platform pool s
 P2-05,2-核心,调度,CLIPS 调度评分规则,scheduling.clp：多因子评分（priority/load/queue/error_rate/ttft）、top-k 加权随机,§4.2,priv/clips/scheduling.clp,P1-15,P0,L,TODO
 P2-06,2-核心,调度,调度器服务入口,ersub_scheduler_srv：粘滞检查 → CLIPS 评分 → failover 三层策略,§4.2,ersub_scheduler_srv.erl,P2-03 P2-05 P2-08,P0,L,TODO
 P2-07,2-核心,调度,Failover 机制,select_with_failover 递归、max_account_switches、账户状态更新,§4.2,ersub_scheduler_srv.erl,P2-06,P0,M,TODO
-P2-08,2-核心,调度,会话粘滞,"ETS 存储 {UserId,SessionHash}→AccountId、TTL 过期清理、命中刷新",§4.2,ersub_session_srv.erl,P1-01,P0,M,TODO
+P2-08,2-核心,调度,会话粘滞,"ETS 存储 {UserId,SessionHash}→AccountId、TTL 过期清理、命中刷新",§4.2,ersub_session_srv.erl,P1-01,P0,M,DONE
 P2-09,2-核心,计费,CLIPS 计费规则 — token 模式,billing.clp：tier 乘数、长上下文乘数、cache 分级定价、最终成本计算,§4.4,priv/clips/billing.clp,P1-15,P0,L,TODO
 P2-10,2-核心,计费,CLIPS 计费规则 — per_request 模式,per_request 定价 fact + 计算规则,§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
 P2-11,2-核心,计费,CLIPS 计费规则 — image 模式,图片分级定价 (1K/2K/4K)、独立 image_rate_multiplier,§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
 P2-12,2-核心,计费,计费服务,ersub_billing_srv：余额 ETS 缓存、预检、扣费（原子操作）、DB 定期同步,§4.4,ersub_billing_srv.erl,P1-11 P2-09,P0,L,TODO
 P2-13,2-核心,计费,异步使用日志,ersub_usage_logger：异步写入 usage_logs、批量 flush,§4.4,ersub_usage_logger.erl,P1-11,P0,M,TODO
 P2-14,2-核心,计费,usage_logs 表 migration,usage_logs DDL（含 account_rate_multiplier、billing_model_source、image 字段等）,§5.2,002_usage_logs.sql,P1-05,P0,S,TODO
-P2-15,2-核心,并发,并发控制服务,ersub_concurrency_srv：counters 槽管理、等待队列、process monitor 自动释放,§4.3,ersub_concurrency_srv.erl,P1-01,P0,L,TODO
+P2-15,2-核心,并发,并发控制服务,ersub_concurrency_srv：counters 槽管理、等待队列、process monitor 自动释放,§4.3,ersub_concurrency_srv.erl,P1-01,P0,L,DONE
 P2-16,2-核心,限速,RPM 滑动窗口限速,ersub_rate_limiter：ETS 时间戳列表、per-user/api_key/group 三级、fail-open/close,§4.12,ersub_rate_limiter.erl,P1-01,P1,M,TODO
 P2-17,2-核心,连接池,上游连接池管理,ersub_upstream_pool：gun 连接池、三种隔离策略（proxy/account/account_proxy）、LRU+idle 驱逐,§4.11,ersub_upstream_pool.erl,P1-01,P0,L,TODO
 P2-18,2-核心,网关,Claude handler 完整版,集成调度→并发→计费→流式→failover 完整管道,§3.3,ersub_claude_handler.erl,P2-01 P2-06 P2-12 P2-15,P0,XL,TODO
