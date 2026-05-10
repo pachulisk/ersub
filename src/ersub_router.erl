@@ -21,7 +21,7 @@ routes() ->
             {"/api/admin/[...]", ersub_admin_handler, []},
             {"/api/payment/[...]", Stub, []},
             {"/api/auth/[...]", Stub, []},
-            {"/api/announcements/[...]", Stub, []},
+            {"/api/announcements/[...]", ersub_announcement_handler, []},
 
             %% Health check (implemented)
             {"/health", ersub_health_handler, []},

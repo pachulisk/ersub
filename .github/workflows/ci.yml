@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: erlang:26
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ersub_test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: apt-get update && apt-get install -y gcc make curl
+
+      - name: Download and build CLIPS
+        run: |
+          curl -sL "https://sourceforge.net/projects/clipsrules/files/CLIPS/6.40/clips_core_source_640.tar.gz/download" -o /tmp/clips.tar.gz
+          cd /tmp && tar xzf clips.tar.gz
+          cd /tmp/clips_core_source_640/core && cc -c -O2 -DGENERIC *.c && ar rcs libclips.a *.o
+          mkdir -p $GITHUB_WORKSPACE/c_src/clips_lib
+          cp /tmp/clips_core_source_640/core/*.h $GITHUB_WORKSPACE/c_src/clips_lib/
+          cp /tmp/clips_core_source_640/core/libclips.a $GITHUB_WORKSPACE/c_src/clips_lib/
+
+      - name: Build CLIPS wrapper
+        run: cd c_src && make
+
+      - name: Compile
+        run: rebar3 compile
+
+      - name: Unit tests
+        run: rebar3 as test eunit --dir=test/unit
+
+      - name: Dialyzer
+        run: rebar3 dialyzer
+        continue-on-error: true
+
+      - name: XRef
+        run: rebar3 xref
+        continue-on-error: true

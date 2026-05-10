@@ -51,17 +51,17 @@ P2-T5,2-核心,测试,CLIPS 调度集成测试,候选账户评分、并发请求
 P2-T6,2-核心,测试,计费属性测试 (PropEr),非负性、rate_multiplier=0 成本为 0、priority 2x 一致性,§13.7,test/property/ersub_billing_prop.erl,P2-09,P1,M,TODO
 P2-T7,2-核心,测试,CLIPS 性能基准,Port 调用延迟测量、并发吞吐量,§13.8,test/bench/ersub_clips_bench.erl,P1-14,P2,S,TODO
 P3-01,3-多平台,网关,OpenAI Chat Completions handler,POST /openai/v1/chat/completions、格式转换、流式兼容,§6.1,ersub_openai_handler.erl,P2-18,P0,L,DONE
-P3-02,3-多平台,网关,OpenAI Responses handler,POST /openai/v1/responses (Codex CLI)、状态管理,§6.1,ersub_openai_responses_handler.erl,P3-01,P1,L,TODO
-P3-03,3-多平台,网关,OpenAI Images handler,POST /openai/v1/images/generations、图片并发限制、成本追踪,§6.1,ersub_openai_images_handler.erl,P3-01 P2-11,P1,M,TODO
-P3-04,3-多平台,网关,Gemini handler,POST /gemini/v1beta/models/*、Claude→Gemini 格式转换,§6.1,ersub_gemini_handler.erl,P2-18,P1,L,TODO
+P3-02,3-多平台,网关,OpenAI Responses handler,POST /openai/v1/responses (Codex CLI)、状态管理,§6.1,ersub_openai_responses_handler.erl,P3-01,P1,L,DONE
+P3-03,3-多平台,网关,OpenAI Images handler,POST /openai/v1/images/generations、图片并发限制、成本追踪,§6.1,ersub_openai_images_handler.erl,P3-01 P2-11,P1,M,DONE
+P3-04,3-多平台,网关,Gemini handler,POST /gemini/v1beta/models/*、Claude→Gemini 格式转换,§6.1,ersub_gemini_handler.erl,P2-18,P1,L,DONE
 P3-05,3-多平台,网关,Antigravity handler,POST /antigravity/v1/messages、OAuth token + credit 计费,§6.1,ersub_antigravity_handler.erl,P2-18 P3-10,P2,L,TODO
 P3-06,3-多平台,Channel,Channel 服务,ersub_channel_srv：Channel CRUD、ETS 缓存、定价覆盖查找,§4.8,ersub_channel_srv.erl,P1-11,P0,L,DONE
 P3-07,3-多平台,Channel,channels 表 migration,channels DDL（model_mapping、pricing_override、allowed_models）,§5.2,003_channels.sql,P1-05,P0,S,DONE
 P3-08,3-多平台,Channel,三级模型映射链,Channel→Account→Group 映射、通配符 gpt-* 匹配、mapping chain 记录,§4.8,ersub_request_transform.erl,P3-06 P1-19,P0,L,DONE
 P3-09,3-多平台,Channel,Channel 级定价覆盖,复合 key {GroupId/Platform/Model} ETS 缓存、通配符定价 fallback,§4.8,ersub_channel_srv.erl,P3-06,P1,M,DONE
-P3-10,3-多平台,认证,OAuth Token 后台刷新服务,ersub_token_refresh_srv：定时刷新、401 触发、平台特定 refresher behaviour、cooldown,§4.10,ersub_token_refresh_srv.erl,P2-03,P0,XL,TODO
-P3-11,3-多平台,认证,Claude OAuth refresher,Anthropic OAuth token refresh 实现,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
-P3-12,3-多平台,认证,OpenAI OAuth refresher,OpenAI OAuth token refresh + training opt-out 可选执行,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
+P3-10,3-多平台,认证,OAuth Token 后台刷新服务,ersub_token_refresh_srv：定时刷新、401 触发、平台特定 refresher behaviour、cooldown,§4.10,ersub_token_refresh_srv.erl,P2-03,P0,XL,DONE
+P3-11,3-多平台,认证,Claude OAuth refresher,Anthropic OAuth token refresh 实现,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,DONE
+P3-12,3-多平台,认证,OpenAI OAuth refresher,OpenAI OAuth token refresh + training opt-out 可选执行,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,DONE
 P3-13,3-多平台,错误处理,错误透传规则引擎,CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为,§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,TODO
 P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,error_passthrough_rules DDL,§5.2,004_error_passthrough.sql,P1-05,P1,S,DONE
 P3-15,3-多平台,安全,Claude Code 客户端检测,User-Agent 校验 claude-cli/X.Y.Z、metadata originator 检测、codex_cli_only 分组限制,§4.15,ersub_client_detector.erl,P1-16,P1,M,DONE
@@ -69,7 +69,7 @@ P3-16,3-多平台,网关,Cache Control 注入,prompt caching 标识检查、cach
 P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
 P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group model pattern→account list 映射,§2.4,priv/clips/model_routing.clp,P1-15,P1,M,TODO
 P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,DONE
-P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,TODO
+P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,DONE
 P3-T3,3-多平台,测试,Claude Code 检测单元测试,UA 格式、大小写、metadata originator、codex_cli_only 限制,§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,DONE
 P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复合 key 缓存,§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,TODO
 P3-T5,3-多平台,测试,Token 刷新集成测试,定时触发、401 触发、cooldown、缓存失效链,§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,TODO
@@ -92,12 +92,12 @@ P4-16,4-管理安全,审核,审核表 migration,moderation_logs DDL（含 conten
 P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_size 校验,§3.3,ersub_security_middleware.erl,P1-02,P1,S,DONE
 P4-18,4-管理安全,前端,前端集成,sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler,§7,priv/static/,P1-02,P1,M,TODO
 P4-T1,4-管理安全,测试,URL 校验单元测试,SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单,§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,DONE
-P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,TODO
+P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,DONE
 P4-T3,4-管理安全,测试,内容审核集成测试,三模式切换、去重缓存、自动封号触发,§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,TODO
 P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),任意 IP + CIDR 匹配一致性,§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,TODO
 P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析,§6.2,ersub_auth_srv.erl,P1-03,P0,M,DONE
 P5-02,5-运营,认证,OAuth 登录流程,GitHub/Google OAuth2 redirect → callback → JWT 签发,§6.2,ersub_auth_srv.erl,P5-01,P1,L,TODO
-P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,TODO
+P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,DONE
 P5-04,5-运营,认证,Pending auth sessions,pending_auth_sessions 表、identity_adoption_decisions、OAuth 注册流程,§6.2,ersub_auth_srv.erl,P5-02,P2,M,TODO
 P5-05,5-运营,认证,auth_identities 表 migration,auth_identities DDL + pending sessions,§5.2,008_auth.sql,P1-05,P1,S,DONE
 P5-06,5-运营,支付,支付订单管理,payment_orders 表、订单生命周期（pending→paid→fulfilled）,§5.2,ersub_payment_srv.erl,P1-11,P1,M,DONE
@@ -110,7 +110,7 @@ P5-12,5-运营,支付,支付表 migration,payment_orders + payment_provider_inst
 P5-13,5-运营,运营,兑换码系统,redeem_codes 表、兑换 API、余额充值,§4.24,ersub_redeem_handler.erl,P1-11,P2,M,DONE
 P5-14,5-运营,运营,促销码系统,promo_codes + promo_code_usage 表、折扣计算、使用限制,§4.24,ersub_promo_handler.erl,P1-11,P2,M,DONE
 P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_codes + promo_code_usage DDL,§5.2,010_redeem_promo.sql,P1-05,P2,S,DONE
-P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,TODO
+P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,DONE
 P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,DONE
 P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,TODO
 P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
@@ -137,10 +137,10 @@ P6-14,6-生产,告警,Ops 告警评估器,ersub_ops_alert_srv：规则评估、s
 P6-15,6-生产,告警,告警静默规则,ops_alert_silences：静默期管理,§4.33,ersub_ops_alert_srv.erl,P6-14,P2,S,TODO
 P6-16,6-生产,告警,告警表 migration,ops_alert_rules + ops_alert_silences DDL,§5.2,016_ops_alerts.sql,P1-05,P2,S,DONE
 P6-17,6-生产,CLIPS,规则热更新 API,POST /api/admin/clips/reload：滚动更新 worker pool 中的规则,§8.2,ersub_admin_handler.erl,P1-14,P1,M,DONE
-P6-18,6-生产,可观测性,健康评分服务,ersub_health_srv：多维健康评分（DB/CLIPS/upstream）、0-100 分,§4.18,ersub_health_srv.erl,P1-21,P2,M,TODO
-P6-19,6-生产,可观测性,指标聚合服务,ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度,§4.18,ersub_metrics_srv.erl,P2-13,P2,L,TODO
+P6-18,6-生产,可观测性,健康评分服务,ersub_health_srv：多维健康评分（DB/CLIPS/upstream）、0-100 分,§4.18,ersub_health_srv.erl,P1-21,P2,M,DONE
+P6-19,6-生产,可观测性,指标聚合服务,ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度,§4.18,ersub_metrics_srv.erl,P2-13,P2,L,DONE
 P6-20,6-生产,可观测性,指标聚合表 migration,metrics_aggregated DDL + 索引,§5.2,017_metrics.sql,P1-05,P2,S,DONE
-P6-21,6-生产,可观测性,使用记录定时清理,ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时,§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,TODO
+P6-21,6-生产,可观测性,使用记录定时清理,ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时,§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,DONE
 P6-22,6-生产,可观测性,Ops 系统日志,ops_system_logs 表、结构化日志 sink,§4.18,ersub_ops_system_log.erl,P1-11,P3,M,TODO
 P6-23,6-生产,可观测性,系统日志表 migration,ops_system_logs DDL,§5.2,018_ops_logs.sql,P1-05,P3,S,DONE
 P6-24,6-生产,定价,定价表自动更新,ersub_pricing_srv：LiteLLM JSON 解析、定时拉取、内嵌 fallback,§4.20,ersub_pricing_srv.erl,P1-03,P1,L,DONE
