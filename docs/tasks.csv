@@ -63,7 +63,7 @@ P3-10,3-多平台,认证,OAuth Token 后台刷新服务,ersub_token_refresh_srv�
 P3-11,3-多平台,认证,Claude OAuth refresher,Anthropic OAuth token refresh 实现,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
 P3-12,3-多平台,认证,OpenAI OAuth refresher,OpenAI OAuth token refresh + training opt-out 可选执行,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
 P3-13,3-多平台,错误处理,错误透传规则引擎,CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为,§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,TODO
-P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,error_passthrough_rules DDL,§5.2,004_error_passthrough.sql,P1-05,P1,S,TODO
+P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,error_passthrough_rules DDL,§5.2,004_error_passthrough.sql,P1-05,P1,S,DONE
 P3-15,3-多平台,安全,Claude Code 客户端检测,User-Agent 校验 claude-cli/X.Y.Z、metadata originator 检测、codex_cli_only 分组限制,§4.15,ersub_client_detector.erl,P1-16,P1,M,DONE
 P3-16,3-多平台,网关,Cache Control 注入,prompt caching 标识检查、cache_control block 注入请求体,§3.3,ersub_request_transform.erl,P3-08,P2,M,TODO
 P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
@@ -82,14 +82,14 @@ P4-06,4-管理安全,配额,配额窗口重置服务,ersub_quota_srv：定时 da
 P4-07,4-管理安全,管理,公告系统,announcements + announcement_reads 表、CRUD API、已读追踪,§4.17,ersub_announcement_handler.erl,P1-11,P2,M,TODO
 P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_reads DDL,§5.2,006_announcements.sql,P1-05,P2,S,TODO
 P4-09,4-管理安全,数据库,软删除基础设施,deleted_at 字段、partial unique index、find_active 查询包装,§4.22,ersub_repo.erl,P1-11,P1,M,TODO
-P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,TODO
-P4-11,4-管理安全,安全,CORS 中间件,可配置 allowed_origins、OPTIONS 预检短路、credentials 支持,§4.16,ersub_cors_middleware.erl,P1-02,P1,M,TODO
+P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,DONE
+P4-11,4-管理安全,安全,CORS 中间件,可配置 allowed_origins、OPTIONS 预检短路、credentials 支持,§4.16,ersub_cors_middleware.erl,P1-02,P1,M,DONE
 P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,scheme 强制、主机白名单 (通配符)、私有 IP 阻断、DNS Rebinding 防护,§4.14,ersub_url_validator.erl,P1-01,P1,L,TODO
 P4-13,4-管理安全,审核,内容审核服务,ersub_moderation_srv：off/observe/pre_block 三模式、OpenAI API 调用,§4.7,ersub_moderation_srv.erl,P1-02,P2,L,TODO
 P4-14,4-管理安全,审核,内容审核 worker pool,poolboy 异步 worker、SHA256 去重缓存、13类风险评分,§4.7,ersub_moderation_worker.erl ersub_moderation_cache.erl,P4-13,P2,M,TODO
 P4-15,4-管理安全,审核,自动封号,违规次数阈值检查、时间窗口、用户 is_banned 标记,§4.7,ersub_moderation_srv.erl,P4-14,P2,S,TODO
 P4-16,4-管理安全,审核,审核表 migration,moderation_logs DDL（含 content_hash、categories、action_taken）,§5.2,007_moderation.sql,P1-05,P2,S,TODO
-P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_size 校验,§3.3,ersub_security_middleware.erl,P1-02,P1,S,TODO
+P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_size 校验,§3.3,ersub_security_middleware.erl,P1-02,P1,S,DONE
 P4-18,4-管理安全,前端,前端集成,sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler,§7,priv/static/,P1-02,P1,M,TODO
 P4-T1,4-管理安全,测试,URL 校验单元测试,SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单,§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,TODO
 P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,TODO
