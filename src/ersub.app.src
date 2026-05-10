@@ -16,7 +16,8 @@
         gun,
         jsx,
         poolboy,
-        yamerl
+        yamerl,
+        gproc
     ]},
     %% epgsql started on-demand by ersub_repo_pool, not at boot
     {included_applications, [epgsql]},
