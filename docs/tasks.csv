@@ -26,12 +26,12 @@ P1-T3,1-MVP,测试,IP/CIDR 单元测试,表驱动测试：白名单、黑名单�
 P1-T4,1-MVP,测试,Repository 集成测试,users/accounts/api_keys CRUD 事务隔离测试、级联删除,§13.5,test/integration/ersub_repo_SUITE.erl,P1-11 P1-T1,P0,M,TODO
 P1-T5,1-MVP,测试,测试数据工厂,must_create_user/account/group/api_key fixture 函数,§13.9,test/support/ersub_test_fixtures.erl,P1-T1,P0,S,TODO
 P2-01,2-核心,流式,SSE 流式响应状态机,gen_statem 实现：idle→connecting→streaming→done、SSE 解析、token 累计,§4.5,ersub_stream_fsm.erl,P1-18,P0,XL,DONE
-P2-02,2-核心,流式,流式 ping 机制,等待并发槽时发送 SSE ping、指数退避 + jitter,§4.3 §4.5,ersub_stream_fsm.erl,P2-01,P1,S,TODO
+P2-02,2-核心,流式,流式 ping 机制,等待并发槽时发送 SSE ping、指数退避 + jitter,§4.3 §4.5,ersub_stream_fsm.erl,P2-01,P1,S,DONE
 P2-03,2-核心,调度,账户 gen_server 进程,per-account 进程：状态管理、EWMA error_rate/ttft 统计、状态转换,§4.1,ersub_account_srv.erl,P1-07 P1-11,P0,L,DONE
 P2-04,2-核心,调度,平台 supervisor,ersub_platform_sup + per-platform pool supervisor、动态子进程管理,§3.2,ersub_platform_sup.erl ersub_claude_pool.erl,P2-03,P0,M,DONE
 P2-05,2-核心,调度,CLIPS 调度评分规则,scheduling.clp：多因子评分（priority/load/queue/error_rate/ttft）、top-k 加权随机,§4.2,priv/clips/scheduling.clp,P1-15,P0,L,TODO
-P2-06,2-核心,调度,调度器服务入口,ersub_scheduler_srv：粘滞检查 → CLIPS 评分 → failover 三层策略,§4.2,ersub_scheduler_srv.erl,P2-03 P2-05 P2-08,P0,L,TODO
-P2-07,2-核心,调度,Failover 机制,select_with_failover 递归、max_account_switches、账户状态更新,§4.2,ersub_scheduler_srv.erl,P2-06,P0,M,TODO
+P2-06,2-核心,调度,调度器服务入口,ersub_scheduler_srv：粘滞检查 → CLIPS 评分 → failover 三层策略,§4.2,ersub_scheduler_srv.erl,P2-03 P2-05 P2-08,P0,L,DONE
+P2-07,2-核心,调度,Failover 机制,select_with_failover 递归、max_account_switches、账户状态更新,§4.2,ersub_scheduler_srv.erl,P2-06,P0,M,DONE
 P2-08,2-核心,调度,会话粘滞,"ETS 存储 {UserId,SessionHash}→AccountId、TTL 过期清理、命中刷新",§4.2,ersub_session_srv.erl,P1-01,P0,M,DONE
 P2-09,2-核心,计费,CLIPS 计费规则 — token 模式,billing.clp：tier 乘数、长上下文乘数、cache 分级定价、最终成本计算,§4.4,priv/clips/billing.clp,P1-15,P0,L,TODO
 P2-10,2-核心,计费,CLIPS 计费规则 — per_request 模式,per_request 定价 fact + 计算规则,§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO

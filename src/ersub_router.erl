@@ -16,7 +16,7 @@ routes() ->
 
             %% Management API (stubs until implemented)
             {"/api/user/[...]", Stub, []},
-            {"/api/keys/[...]", Stub, []},
+            {"/api/keys/[...]", ersub_keys_handler, []},
             {"/api/usage/[...]", Stub, []},
             {"/api/admin/[...]", Stub, []},
             {"/api/payment/[...]", Stub, []},

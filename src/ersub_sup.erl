@@ -64,6 +64,11 @@ init([]) ->
         #{id => ersub_scheduler_srv,
           start => {ersub_scheduler_srv, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_auth_srv,
+          start => {ersub_auth_srv, start_link, []},
+          restart => permanent,
           type => worker}
 
         %% Children added as modules are implemented:
