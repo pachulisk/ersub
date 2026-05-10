@@ -4,11 +4,11 @@ P1-02,1-MVP,项目初始化,Cowboy HTTP server + H2C,"集成 Cowboy listener、�
 P1-03,1-MVP,项目初始化,配置系统,"YAML 配置加载、环境变量替换、persistent_term 写入、ersub_config_srv",§9.1 §9.2,ersub_config_srv.erl config/ersub.yaml,P1-01,P0,M,DONE
 P1-04,1-MVP,数据库,PostgreSQL 连接池,"epgsql 连接池 (poolboy)、连接配置、健康检查",§5.1,ersub_repo_pool.erl,P1-03,P0,M,DONE
 P1-05,1-MVP,数据库,数据库 migration 框架,"migration runner、SQL 文件加载、版本跟踪",§5.2,ersub_migration.erl priv/migrations/,P1-04,P0,M,DONE
-P1-06,1-MVP,数据库,核心表 migration — users,"users 表 DDL（含 balance_notify、ban、soft delete 字段）",§5.2,001_initial.sql,P1-05,P0,S,TODO
-P1-07,1-MVP,数据库,核心表 migration — accounts,"accounts 表 DDL（含 base_url、notes、expires_at、msg_queue_mode）",§5.2,001_initial.sql,P1-05,P0,S,TODO
-P1-08,1-MVP,数据库,核心表 migration — api_keys,"api_keys 表 DDL（含 ip_whitelist/blacklist JSONB、rate_limit_5h、soft delete）",§5.2,001_initial.sql,P1-05,P0,S,TODO
-P1-09,1-MVP,数据库,核心表 migration — groups,"groups 表 DDL（含图片生成控制、sort_order、account_filter）",§5.2,001_initial.sql,P1-05,P0,S,TODO
-P1-10,1-MVP,数据库,核心表 migration — 关联表,"account_groups、user_allowed_groups、settings 表 DDL",§5.2,001_initial.sql,P1-05,P0,S,TODO
+P1-06,1-MVP,数据库,核心表 migration — users,"users 表 DDL（含 balance_notify、ban、soft delete 字段）",§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-07,1-MVP,数据库,核心表 migration — accounts,"accounts 表 DDL（含 base_url、notes、expires_at、msg_queue_mode）",§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-08,1-MVP,数据库,核心表 migration — api_keys,"api_keys 表 DDL（含 ip_whitelist/blacklist JSONB、rate_limit_5h、soft delete）",§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-09,1-MVP,数据库,核心表 migration — groups,"groups 表 DDL（含图片生成控制、sort_order、account_filter）",§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-10,1-MVP,数据库,核心表 migration — 关联表,"account_groups、user_allowed_groups、settings 表 DDL",§5.2,001_initial.sql,P1-05,P0,S,DONE
 P1-11,1-MVP,数据库,数据访问层 — 基础 CRUD,"ersub_repo 模块：users/accounts/api_keys/groups 的基本 CRUD 操作",§5.2,ersub_repo.erl,P1-06 P1-07 P1-08 P1-09 P1-10,P0,L,TODO
 P1-12,1-MVP,CLIPS,CLIPS C 包装器编译,"ersub_clips.c 编译、NDJSON 协议实现、主循环 (assert/run/retract_all/reload)",§8.3,c_src/ersub_clips.c c_src/Makefile,P1-01,P0,L,TODO
 P1-13,1-MVP,CLIPS,CLIPS Port gen_server worker,"ersub_clips_worker.erl：Port 启动/通信/崩溃恢复、规则文件加载",§2.2 §2.3,ersub_clips_worker.erl,P1-12,P0,M,TODO
