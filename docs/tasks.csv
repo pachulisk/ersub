@@ -1,166 +1,166 @@
 ID,Phase,Category,Task,Description,Design Ref,Source Files,Dependencies,Priority,Estimated Size,Status
-P1-01,1-MVP,项目初始化,rebar3 项目脚手架,"创建 rebar.config、app/sup 模块、config/ 目录、vm.args、sys.config",§10.1 §11,ersub_app.erl ersub_sup.erl rebar.config,,P0,S,DONE
-P1-02,1-MVP,项目初始化,Cowboy HTTP server + H2C,"集成 Cowboy listener、路由框架、HTTP/1.1 + HTTP/2 Cleartext 支持",§3.1 §6.1 §9.1,ersub_router.erl cowboy_listener,P1-01,P0,M,DONE
-P1-03,1-MVP,项目初始化,配置系统,"YAML 配置加载、环境变量替换、persistent_term 写入、ersub_config_srv",§9.1 §9.2,ersub_config_srv.erl config/ersub.yaml,P1-01,P0,M,DONE
-P1-04,1-MVP,数据库,PostgreSQL 连接池,"epgsql 连接池 (poolboy)、连接配置、健康检查",§5.1,ersub_repo_pool.erl,P1-03,P0,M,DONE
-P1-05,1-MVP,数据库,数据库 migration 框架,"migration runner、SQL 文件加载、版本跟踪",§5.2,ersub_migration.erl priv/migrations/,P1-04,P0,M,DONE
-P1-06,1-MVP,数据库,核心表 migration — users,"users 表 DDL（含 balance_notify、ban、soft delete 字段）",§5.2,001_initial.sql,P1-05,P0,S,DONE
-P1-07,1-MVP,数据库,核心表 migration — accounts,"accounts 表 DDL（含 base_url、notes、expires_at、msg_queue_mode）",§5.2,001_initial.sql,P1-05,P0,S,DONE
-P1-08,1-MVP,数据库,核心表 migration — api_keys,"api_keys 表 DDL（含 ip_whitelist/blacklist JSONB、rate_limit_5h、soft delete）",§5.2,001_initial.sql,P1-05,P0,S,DONE
-P1-09,1-MVP,数据库,核心表 migration — groups,"groups 表 DDL（含图片生成控制、sort_order、account_filter）",§5.2,001_initial.sql,P1-05,P0,S,DONE
-P1-10,1-MVP,数据库,核心表 migration — 关联表,"account_groups、user_allowed_groups、settings 表 DDL",§5.2,001_initial.sql,P1-05,P0,S,DONE
-P1-11,1-MVP,数据库,数据访问层 — 基础 CRUD,"ersub_repo 模块：users/accounts/api_keys/groups 的基本 CRUD 操作",§5.2,ersub_repo.erl,P1-06 P1-07 P1-08 P1-09 P1-10,P0,L,DONE
-P1-12,1-MVP,CLIPS,CLIPS C 包装器编译,"ersub_clips.c 编译、NDJSON 协议实现、主循环 (assert/run/retract_all/reload)",§8.3,c_src/ersub_clips.c c_src/Makefile,P1-01,P0,L,TODO
-P1-13,1-MVP,CLIPS,CLIPS Port gen_server worker,"ersub_clips_worker.erl：Port 启动/通信/崩溃恢复、规则文件加载",§2.2 §2.3,ersub_clips_worker.erl,P1-12,P0,M,TODO
-P1-14,1-MVP,CLIPS,CLIPS worker pool (poolboy),"ersub_clips_pool.erl：poolboy 集成、池大小配置、worker 生命周期",§2.2,ersub_clips_pool.erl,P1-13,P0,M,TODO
-P1-15,1-MVP,CLIPS,CLIPS 基础规则文件 — core.clp,"deftemplate 定义：candidate-account、score-weights、usage、model-pricing 等",§4.2 §4.4 §8.1,priv/clips/core.clp,P1-12,P0,M,TODO
-P1-16,1-MVP,认证,API Key 认证中间件,"从 x-api-key / Authorization header 提取 key → hash → ETS 查找 → 获取 user/group",§6.2,ersub_auth_middleware.erl,P1-11,P0,M,TODO
-P1-17,1-MVP,安全,IP 黑白名单,"CIDR 解析与匹配、黑名单优先、per-key 级别控制",§4.13,ersub_ip_access.erl,P1-16,P1,S,TODO
-P1-18,1-MVP,网关,Claude /v1/messages 代理（非流式）,"请求解析、上游转发 (gun)、响应透传、基础错误处理",§3.3 §6.1,ersub_claude_handler.erl,P1-02 P1-16,P0,L,TODO
-P1-19,1-MVP,网关,请求转换基础,"model 名称透传、system prompt 保留、header 过滤",§4.8,ersub_request_transform.erl,P1-18,P1,M,TODO
-P1-20,1-MVP,运维,Setup Wizard,"首次运行检测 (.installed)、交互式 DB/admin/server 配置、config 生成",§4.19,ersub_setup.erl,P1-03 P1-05,P1,M,TODO
-P1-21,1-MVP,运维,健康检查端点,"GET /health 端点、DB 连通性检查、CLIPS pool 存活检查",§3.1,ersub_health_handler.erl,P1-02 P1-04 P1-14,P1,S,TODO
-P1-T1,1-MVP,测试,测试基础设施,"eunit/CT 配置、ersub_test_helpers、ersub_test_db（Docker PostgreSQL + 事务隔离）",§13.2 §13.3 §13.5,test/support/,P1-04,P0,M,TODO
-P1-T2,1-MVP,测试,CLIPS Port 测试,"CLIPS worker 生命周期、NDJSON 通信、规则加载验证",§13.5,test/integration/ersub_clips_SUITE.erl,P1-14 P1-T1,P0,M,TODO
-P1-T3,1-MVP,测试,IP/CIDR 单元测试,"表驱动测试：白名单、黑名单、CIDR 匹配、边界情况",§13.4,test/unit/ersub_ip_access_tests.erl,P1-17,P1,S,TODO
-P1-T4,1-MVP,测试,Repository 集成测试,"users/accounts/api_keys CRUD 事务隔离测试、级联删除",§13.5,test/integration/ersub_repo_SUITE.erl,P1-11 P1-T1,P0,M,TODO
-P1-T5,1-MVP,测试,测试数据工厂,"must_create_user/account/group/api_key fixture 函数",§13.9,test/support/ersub_test_fixtures.erl,P1-T1,P0,S,TODO
-P2-01,2-核心,流式,SSE 流式响应状态机,"gen_statem 实现：idle→connecting→streaming→done、SSE 解析、token 累计",§4.5,ersub_stream_fsm.erl,P1-18,P0,XL,TODO
-P2-02,2-核心,流式,流式 ping 机制,"等待并发槽时发送 SSE ping、指数退避 + jitter",§4.3 §4.5,ersub_stream_fsm.erl,P2-01,P1,S,TODO
-P2-03,2-核心,调度,账户 gen_server 进程,"per-account 进程：状态管理、EWMA error_rate/ttft 统计、状态转换",§4.1,ersub_account_srv.erl,P1-07 P1-11,P0,L,TODO
-P2-04,2-核心,调度,平台 supervisor,"ersub_platform_sup + per-platform pool supervisor、动态子进程管理",§3.2,ersub_platform_sup.erl ersub_claude_pool.erl,P2-03,P0,M,TODO
-P2-05,2-核心,调度,CLIPS 调度评分规则,"scheduling.clp：多因子评分（priority/load/queue/error_rate/ttft）、top-k 加权随机",§4.2,priv/clips/scheduling.clp,P1-15,P0,L,TODO
-P2-06,2-核心,调度,调度器服务入口,"ersub_scheduler_srv：粘滞检查 → CLIPS 评分 → failover 三层策略",§4.2,ersub_scheduler_srv.erl,P2-03 P2-05 P2-08,P0,L,TODO
-P2-07,2-核心,调度,Failover 机制,"select_with_failover 递归、max_account_switches、账户状态更新",§4.2,ersub_scheduler_srv.erl,P2-06,P0,M,TODO
+P1-01,1-MVP,项目初始化,rebar3 项目脚手架,创建 rebar.config、app/sup 模块、config/ 目录、vm.args、sys.config,§10.1 §11,ersub_app.erl ersub_sup.erl rebar.config,,P0,S,DONE
+P1-02,1-MVP,项目初始化,Cowboy HTTP server + H2C,集成 Cowboy listener、路由框架、HTTP/1.1 + HTTP/2 Cleartext 支持,§3.1 §6.1 §9.1,ersub_router.erl cowboy_listener,P1-01,P0,M,DONE
+P1-03,1-MVP,项目初始化,配置系统,YAML 配置加载、环境变量替换、persistent_term 写入、ersub_config_srv,§9.1 §9.2,ersub_config_srv.erl config/ersub.yaml,P1-01,P0,M,DONE
+P1-04,1-MVP,数据库,PostgreSQL 连接池,epgsql 连接池 (poolboy)、连接配置、健康检查,§5.1,ersub_repo_pool.erl,P1-03,P0,M,DONE
+P1-05,1-MVP,数据库,数据库 migration 框架,migration runner、SQL 文件加载、版本跟踪,§5.2,ersub_migration.erl priv/migrations/,P1-04,P0,M,DONE
+P1-06,1-MVP,数据库,核心表 migration — users,users 表 DDL（含 balance_notify、ban、soft delete 字段）,§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-07,1-MVP,数据库,核心表 migration — accounts,accounts 表 DDL（含 base_url、notes、expires_at、msg_queue_mode）,§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-08,1-MVP,数据库,核心表 migration — api_keys,api_keys 表 DDL（含 ip_whitelist/blacklist JSONB、rate_limit_5h、soft delete）,§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-09,1-MVP,数据库,核心表 migration — groups,groups 表 DDL（含图片生成控制、sort_order、account_filter）,§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-10,1-MVP,数据库,核心表 migration — 关联表,account_groups、user_allowed_groups、settings 表 DDL,§5.2,001_initial.sql,P1-05,P0,S,DONE
+P1-11,1-MVP,数据库,数据访问层 — 基础 CRUD,ersub_repo 模块：users/accounts/api_keys/groups 的基本 CRUD 操作,§5.2,ersub_repo.erl,P1-06 P1-07 P1-08 P1-09 P1-10,P0,L,DONE
+P1-12,1-MVP,CLIPS,CLIPS C 包装器编译,ersub_clips.c 编译、NDJSON 协议实现、主循环 (assert/run/retract_all/reload),§8.3,c_src/ersub_clips.c c_src/Makefile,P1-01,P0,L,TODO
+P1-13,1-MVP,CLIPS,CLIPS Port gen_server worker,ersub_clips_worker.erl：Port 启动/通信/崩溃恢复、规则文件加载,§2.2 §2.3,ersub_clips_worker.erl,P1-12,P0,M,TODO
+P1-14,1-MVP,CLIPS,CLIPS worker pool (poolboy),ersub_clips_pool.erl：poolboy 集成、池大小配置、worker 生命周期,§2.2,ersub_clips_pool.erl,P1-13,P0,M,TODO
+P1-15,1-MVP,CLIPS,CLIPS 基础规则文件 — core.clp,deftemplate 定义：candidate-account、score-weights、usage、model-pricing 等,§4.2 §4.4 §8.1,priv/clips/core.clp,P1-12,P0,M,TODO
+P1-16,1-MVP,认证,API Key 认证中间件,从 x-api-key / Authorization header 提取 key → hash → ETS 查找 → 获取 user/group,§6.2,ersub_auth_middleware.erl,P1-11,P0,M,DONE
+P1-17,1-MVP,安全,IP 黑白名单,CIDR 解析与匹配、黑名单优先、per-key 级别控制,§4.13,ersub_ip_access.erl,P1-16,P1,S,DONE
+P1-18,1-MVP,网关,Claude /v1/messages 代理（非流式）,请求解析、上游转发 (gun)、响应透传、基础错误处理,§3.3 §6.1,ersub_claude_handler.erl,P1-02 P1-16,P0,L,TODO
+P1-19,1-MVP,网关,请求转换基础,model 名称透传、system prompt 保留、header 过滤,§4.8,ersub_request_transform.erl,P1-18,P1,M,TODO
+P1-20,1-MVP,运维,Setup Wizard,首次运行检测 (.installed)、交互式 DB/admin/server 配置、config 生成,§4.19,ersub_setup.erl,P1-03 P1-05,P1,M,TODO
+P1-21,1-MVP,运维,健康检查端点,GET /health 端点、DB 连通性检查、CLIPS pool 存活检查,§3.1,ersub_health_handler.erl,P1-02 P1-04 P1-14,P1,S,TODO
+P1-T1,1-MVP,测试,测试基础设施,eunit/CT 配置、ersub_test_helpers、ersub_test_db（Docker PostgreSQL + 事务隔离）,§13.2 §13.3 §13.5,test/support/,P1-04,P0,M,TODO
+P1-T2,1-MVP,测试,CLIPS Port 测试,CLIPS worker 生命周期、NDJSON 通信、规则加载验证,§13.5,test/integration/ersub_clips_SUITE.erl,P1-14 P1-T1,P0,M,TODO
+P1-T3,1-MVP,测试,IP/CIDR 单元测试,表驱动测试：白名单、黑名单、CIDR 匹配、边界情况,§13.4,test/unit/ersub_ip_access_tests.erl,P1-17,P1,S,TODO
+P1-T4,1-MVP,测试,Repository 集成测试,users/accounts/api_keys CRUD 事务隔离测试、级联删除,§13.5,test/integration/ersub_repo_SUITE.erl,P1-11 P1-T1,P0,M,TODO
+P1-T5,1-MVP,测试,测试数据工厂,must_create_user/account/group/api_key fixture 函数,§13.9,test/support/ersub_test_fixtures.erl,P1-T1,P0,S,TODO
+P2-01,2-核心,流式,SSE 流式响应状态机,gen_statem 实现：idle→connecting→streaming→done、SSE 解析、token 累计,§4.5,ersub_stream_fsm.erl,P1-18,P0,XL,TODO
+P2-02,2-核心,流式,流式 ping 机制,等待并发槽时发送 SSE ping、指数退避 + jitter,§4.3 §4.5,ersub_stream_fsm.erl,P2-01,P1,S,TODO
+P2-03,2-核心,调度,账户 gen_server 进程,per-account 进程：状态管理、EWMA error_rate/ttft 统计、状态转换,§4.1,ersub_account_srv.erl,P1-07 P1-11,P0,L,TODO
+P2-04,2-核心,调度,平台 supervisor,ersub_platform_sup + per-platform pool supervisor、动态子进程管理,§3.2,ersub_platform_sup.erl ersub_claude_pool.erl,P2-03,P0,M,TODO
+P2-05,2-核心,调度,CLIPS 调度评分规则,scheduling.clp：多因子评分（priority/load/queue/error_rate/ttft）、top-k 加权随机,§4.2,priv/clips/scheduling.clp,P1-15,P0,L,TODO
+P2-06,2-核心,调度,调度器服务入口,ersub_scheduler_srv：粘滞检查 → CLIPS 评分 → failover 三层策略,§4.2,ersub_scheduler_srv.erl,P2-03 P2-05 P2-08,P0,L,TODO
+P2-07,2-核心,调度,Failover 机制,select_with_failover 递归、max_account_switches、账户状态更新,§4.2,ersub_scheduler_srv.erl,P2-06,P0,M,TODO
 P2-08,2-核心,调度,会话粘滞,"ETS 存储 {UserId,SessionHash}→AccountId、TTL 过期清理、命中刷新",§4.2,ersub_session_srv.erl,P1-01,P0,M,TODO
-P2-09,2-核心,计费,CLIPS 计费规则 — token 模式,"billing.clp：tier 乘数、长上下文乘数、cache 分级定价、最终成本计算",§4.4,priv/clips/billing.clp,P1-15,P0,L,TODO
-P2-10,2-核心,计费,CLIPS 计费规则 — per_request 模式,"per_request 定价 fact + 计算规则",§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
-P2-11,2-核心,计费,CLIPS 计费规则 — image 模式,"图片分级定价 (1K/2K/4K)、独立 image_rate_multiplier",§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
-P2-12,2-核心,计费,计费服务,"ersub_billing_srv：余额 ETS 缓存、预检、扣费（原子操作）、DB 定期同步",§4.4,ersub_billing_srv.erl,P1-11 P2-09,P0,L,TODO
-P2-13,2-核心,计费,异步使用日志,"ersub_usage_logger：异步写入 usage_logs、批量 flush",§4.4,ersub_usage_logger.erl,P1-11,P0,M,TODO
-P2-14,2-核心,计费,usage_logs 表 migration,"usage_logs DDL（含 account_rate_multiplier、billing_model_source、image 字段等）",§5.2,002_usage_logs.sql,P1-05,P0,S,TODO
-P2-15,2-核心,并发,并发控制服务,"ersub_concurrency_srv：counters 槽管理、等待队列、process monitor 自动释放",§4.3,ersub_concurrency_srv.erl,P1-01,P0,L,TODO
-P2-16,2-核心,限速,RPM 滑动窗口限速,"ersub_rate_limiter：ETS 时间戳列表、per-user/api_key/group 三级、fail-open/close",§4.12,ersub_rate_limiter.erl,P1-01,P1,M,TODO
-P2-17,2-核心,连接池,上游连接池管理,"ersub_upstream_pool：gun 连接池、三种隔离策略（proxy/account/account_proxy）、LRU+idle 驱逐",§4.11,ersub_upstream_pool.erl,P1-01,P0,L,TODO
-P2-18,2-核心,网关,Claude handler 完整版,"集成调度→并发→计费→流式→failover 完整管道",§3.3,ersub_claude_handler.erl,P2-01 P2-06 P2-12 P2-15,P0,XL,TODO
-P2-T1,2-核心,测试,调度器单元测试,"评分算法正确性、top-k 选择、排除列表",§13.4,test/unit/ersub_scheduler_tests.erl,P2-05 P2-06,P0,M,TODO
-P2-T2,2-核心,测试,计费单元测试,"token/per_request/image 三模式、tier 乘数、长上下文、rate_multiplier=0",§13.4,test/unit/ersub_billing_tests.erl,P2-09 P2-10 P2-11,P0,M,TODO
-P2-T3,2-核心,测试,并发控制集成测试,"槽获取/释放、等待队列、process 崩溃自动释放、队列满拒绝",§13.5,test/integration/ersub_concurrency_SUITE.erl,P2-15,P0,M,TODO
-P2-T4,2-核心,测试,会话粘滞集成测试,"ETS TTL 过期、命中刷新、账户不兼容清理",§13.5,test/integration/ersub_session_SUITE.erl,P2-08,P1,S,TODO
-P2-T5,2-核心,测试,CLIPS 调度集成测试,"候选账户评分、并发请求隔离、规则热更新",§13.5,test/integration/ersub_clips_SUITE.erl,P2-05,P0,M,TODO
-P2-T6,2-核心,测试,计费属性测试 (PropEr),"非负性、rate_multiplier=0 成本为 0、priority 2x 一致性",§13.7,test/property/ersub_billing_prop.erl,P2-09,P1,M,TODO
-P2-T7,2-核心,测试,CLIPS 性能基准,"Port 调用延迟测量、并发吞吐量",§13.8,test/bench/ersub_clips_bench.erl,P1-14,P2,S,TODO
-P3-01,3-多平台,网关,OpenAI Chat Completions handler,"POST /openai/v1/chat/completions、格式转换、流式兼容",§6.1,ersub_openai_handler.erl,P2-18,P0,L,TODO
-P3-02,3-多平台,网关,OpenAI Responses handler,"POST /openai/v1/responses (Codex CLI)、状态管理",§6.1,ersub_openai_responses_handler.erl,P3-01,P1,L,TODO
-P3-03,3-多平台,网关,OpenAI Images handler,"POST /openai/v1/images/generations、图片并发限制、成本追踪",§6.1,ersub_openai_images_handler.erl,P3-01 P2-11,P1,M,TODO
-P3-04,3-多平台,网关,Gemini handler,"POST /gemini/v1beta/models/*、Claude→Gemini 格式转换",§6.1,ersub_gemini_handler.erl,P2-18,P1,L,TODO
-P3-05,3-多平台,网关,Antigravity handler,"POST /antigravity/v1/messages、OAuth token + credit 计费",§6.1,ersub_antigravity_handler.erl,P2-18 P3-10,P2,L,TODO
-P3-06,3-多平台,Channel,Channel 服务,"ersub_channel_srv：Channel CRUD、ETS 缓存、定价覆盖查找",§4.8,ersub_channel_srv.erl,P1-11,P0,L,TODO
-P3-07,3-多平台,Channel,channels 表 migration,"channels DDL（model_mapping、pricing_override、allowed_models）",§5.2,003_channels.sql,P1-05,P0,S,TODO
-P3-08,3-多平台,Channel,三级模型映射链,"Channel→Account→Group 映射、通配符 gpt-* 匹配、mapping chain 记录",§4.8,ersub_request_transform.erl,P3-06 P1-19,P0,L,TODO
-P3-09,3-多平台,Channel,Channel 级定价覆盖,"复合 key {GroupId/Platform/Model} ETS 缓存、通配符定价 fallback",§4.8,ersub_channel_srv.erl,P3-06,P1,M,TODO
-P3-10,3-多平台,认证,OAuth Token 后台刷新服务,"ersub_token_refresh_srv：定时刷新、401 触发、平台特定 refresher behaviour、cooldown",§4.10,ersub_token_refresh_srv.erl,P2-03,P0,XL,TODO
-P3-11,3-多平台,认证,Claude OAuth refresher,"Anthropic OAuth token refresh 实现",§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
-P3-12,3-多平台,认证,OpenAI OAuth refresher,"OpenAI OAuth token refresh + training opt-out 可选执行",§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
-P3-13,3-多平台,错误处理,错误透传规则引擎,"CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为",§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,TODO
-P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,"error_passthrough_rules DDL",§5.2,004_error_passthrough.sql,P1-05,P1,S,TODO
-P3-15,3-多平台,安全,Claude Code 客户端检测,"User-Agent 校验 claude-cli/X.Y.Z、metadata originator 检测、codex_cli_only 分组限制",§4.15,ersub_client_detector.erl,P1-16,P1,M,TODO
-P3-16,3-多平台,网关,Cache Control 注入,"prompt caching 标识检查、cache_control block 注入请求体",§3.3,ersub_request_transform.erl,P3-08,P2,M,TODO
-P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,"account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动",§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
-P3-18,3-多平台,调度,模型路由 CLIPS 规则,"model_routing.clp：group model pattern→account list 映射",§2.4,priv/clips/model_routing.clp,P1-15,P1,M,TODO
-P3-T1,3-多平台,测试,模型映射单元测试,"三级链、通配符匹配、无匹配 fallback、mapping chain 记录",§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,TODO
-P3-T2,3-多平台,测试,错误透传单元测试,"规则匹配、body 8KB 截断、platform 过滤",§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,TODO
-P3-T3,3-多平台,测试,Claude Code 检测单元测试,"UA 格式、大小写、metadata originator、codex_cli_only 限制",§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,TODO
-P3-T4,3-多平台,测试,Channel 集成测试,"Channel CRUD、定价覆盖、复合 key 缓存",§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,TODO
-P3-T5,3-多平台,测试,Token 刷新集成测试,"定时触发、401 触发、cooldown、缓存失效链",§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,TODO
-P4-01,4-管理安全,管理,用户管理 API,"GET/PUT /api/user/profile、余额历史、密码修改、2FA 开关",§6.1,ersub_user_handler.erl,P1-11 P1-16,P0,L,TODO
-P4-02,4-管理安全,管理,Admin 管理 API,"用户/账户/分组 CRUD、使用统计、仪表盘、设置管理",§6.1,ersub_admin_handler.erl,P1-11 P1-16,P0,XL,TODO
-P4-03,4-管理安全,管理,API Key 管理 API,"GET/POST/PUT/DELETE /api/keys、key 生成 (hash+prefix)",§6.1,ersub_keys_handler.erl,P1-11,P0,M,TODO
-P4-04,4-管理安全,配额,分组/订阅系统 migration,"user_subscriptions 表 DDL",§5.2,005_subscriptions.sql,P1-05,P0,S,TODO
-P4-05,4-管理安全,配额,CLIPS 配额检查规则,"quota.clp：日/周/月配额检查、violation 断言、quota-ok 规则",§4.6,priv/clips/quota.clp,P1-15,P0,M,TODO
-P4-06,4-管理安全,配额,配额窗口重置服务,"ersub_quota_srv：定时 daily/weekly/monthly 重置",§4.6,ersub_quota_srv (in billing_srv),P2-12 P4-04,P0,M,TODO
-P4-07,4-管理安全,管理,公告系统,"announcements + announcement_reads 表、CRUD API、已读追踪",§4.17,ersub_announcement_handler.erl,P1-11,P2,M,TODO
-P4-08,4-管理安全,管理,公告表 migration,"announcements、announcement_reads DDL",§5.2,006_announcements.sql,P1-05,P2,S,TODO
-P4-09,4-管理安全,数据库,软删除基础设施,"deleted_at 字段、partial unique index、find_active 查询包装",§4.22,ersub_repo.erl,P1-11,P1,M,TODO
-P4-10,4-管理安全,安全,安全响应头中间件,"CSP (含 nonce 注入)、x-frame-options、x-content-type-options",§4.16,ersub_security_middleware.erl,P1-02,P1,M,TODO
-P4-11,4-管理安全,安全,CORS 中间件,"可配置 allowed_origins、OPTIONS 预检短路、credentials 支持",§4.16,ersub_cors_middleware.erl,P1-02,P1,M,TODO
-P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,"scheme 强制、主机白名单 (通配符)、私有 IP 阻断、DNS Rebinding 防护",§4.14,ersub_url_validator.erl,P1-01,P1,L,TODO
-P4-13,4-管理安全,审核,内容审核服务,"ersub_moderation_srv：off/observe/pre_block 三模式、OpenAI API 调用",§4.7,ersub_moderation_srv.erl,P1-02,P2,L,TODO
-P4-14,4-管理安全,审核,内容审核 worker pool,"poolboy 异步 worker、SHA256 去重缓存、13类风险评分",§4.7,ersub_moderation_worker.erl ersub_moderation_cache.erl,P4-13,P2,M,TODO
-P4-15,4-管理安全,审核,自动封号,"违规次数阈值检查、时间窗口、用户 is_banned 标记",§4.7,ersub_moderation_srv.erl,P4-14,P2,S,TODO
-P4-16,4-管理安全,审核,审核表 migration,"moderation_logs DDL（含 content_hash、categories、action_taken）",§5.2,007_moderation.sql,P1-05,P2,S,TODO
-P4-17,4-管理安全,安全,请求体大小限制,"Cowboy 中间件：max_body_size 校验",§3.3,ersub_security_middleware.erl,P1-02,P1,S,TODO
-P4-18,4-管理安全,前端,前端集成,"sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler",§7,priv/static/,P1-02,P1,M,TODO
-P4-T1,4-管理安全,测试,URL 校验单元测试,"SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单",§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,TODO
-P4-T2,4-管理安全,测试,配额单元测试,"日/周/月配额检查、窗口重置、边界条件",§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,TODO
-P4-T3,4-管理安全,测试,内容审核集成测试,"三模式切换、去重缓存、自动封号触发",§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,TODO
-P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),"任意 IP + CIDR 匹配一致性",§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,TODO
-P5-01,5-运营,认证,JWT 签发与验证,"ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析",§6.2,ersub_auth_srv.erl,P1-03,P0,M,TODO
-P5-02,5-运营,认证,OAuth 登录流程,"GitHub/Google OAuth2 redirect → callback → JWT 签发",§6.2,ersub_auth_srv.erl,P5-01,P1,L,TODO
-P5-03,5-运营,认证,TOTP 2FA,"ersub_totp：secret 生成、QR code URI、verify token",§6.2,ersub_totp.erl,P5-01,P2,M,TODO
-P5-04,5-运营,认证,Pending auth sessions,"pending_auth_sessions 表、identity_adoption_decisions、OAuth 注册流程",§6.2,ersub_auth_srv.erl,P5-02,P2,M,TODO
-P5-05,5-运营,认证,auth_identities 表 migration,"auth_identities DDL + pending sessions",§5.2,008_auth.sql,P1-05,P1,S,TODO
-P5-06,5-运营,支付,支付订单管理,"payment_orders 表、订单生命周期（pending→paid→fulfilled）",§5.2,ersub_payment_srv.erl,P1-11,P1,M,TODO
-P5-07,5-运营,支付,Stripe 集成,"Stripe checkout session 创建、webhook 处理、订单确认",§4.34,ersub_stripe.erl,P5-06,P2,L,TODO
-P5-08,5-运营,支付,Alipay 集成,"支付宝支付创建、异步回调处理",§4.34,ersub_alipay.erl,P5-06,P2,L,TODO
-P5-09,5-运营,支付,WeChat Pay 集成,"微信支付创建、回调处理",§4.34,ersub_wechat.erl,P5-06,P2,L,TODO
-P5-10,5-运营,支付,支付负载均衡,"多服务商实例配置、权重分配、payment_provider_instances 表",§5.2,ersub_payment_srv.erl,P5-06,P2,M,TODO
-P5-11,5-运营,支付,支付审计日志,"payment_audit_logs 表、幂等性保证",§5.2,009_payment.sql,P1-05,P2,S,TODO
-P5-12,5-运营,支付,支付表 migration,"payment_orders + payment_provider_instances + payment_audit_logs DDL",§5.2,009_payment.sql,P1-05,P1,S,TODO
-P5-13,5-运营,运营,兑换码系统,"redeem_codes 表、兑换 API、余额充值",§4.24,ersub_redeem_handler.erl,P1-11,P2,M,TODO
-P5-14,5-运营,运营,促销码系统,"promo_codes + promo_code_usage 表、折扣计算、使用限制",§4.24,ersub_promo_handler.erl,P1-11,P2,M,TODO
-P5-15,5-运营,运营,兑换码/促销码表 migration,"redeem_codes + promo_codes + promo_code_usage DDL",§5.2,010_redeem_promo.sql,P1-05,P2,S,TODO
-P5-16,5-运营,运营,分销返佣系统,"ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻",§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,TODO
-P5-17,5-运营,运营,返佣表 migration,"user_affiliates + user_affiliate_ledger DDL",§5.2,011_affiliate.sql,P1-05,P2,S,TODO
-P5-18,5-运营,运营,余额通知,"ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重",§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,TODO
-P5-19,5-运营,运营,自定义页面,"Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护",§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
-P5-20,5-运营,运营,用户自定义属性,"user_attribute_definitions + user_attribute_values 表、API",§4.24,ersub_user_handler.erl,P1-11,P3,M,TODO
-P5-21,5-运营,运营,属性表 migration,"user_attribute_definitions + user_attribute_values DDL",§5.2,012_user_attrs.sql,P1-05,P3,S,TODO
-P5-22,5-运营,安全,后端只读模式,"Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求",§4.30,ersub_security_middleware.erl,P1-02,P2,S,TODO
-P5-T1,5-运营,测试,认证集成测试,"JWT 签发/验证、OAuth 流程、TOTP setup/verify",§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
-P5-T2,5-运营,测试,支付集成测试,"webhook 处理、订单状态转换、审计日志",§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,TODO
-P5-T3,5-运营,测试,返佣单元测试,"返佣计算、冻结/解冻、ledger 记录",§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,TODO
-P6-01,6-生产,WebSocket,WebSocket v2 handler,"cowboy_websocket behaviour、帧级双向中继、协议版本检测",§4.21,ersub_openai_ws_handler.erl,P3-01,P1,XL,TODO
-P6-02,6-生产,WebSocket,WebSocket 连接池,"per-account WS 连接池、min/max idle、idle timeout",§4.21,ersub_openai_ws_handler.erl,P6-01,P1,M,TODO
-P6-03,6-生产,WebSocket,WebSocket RateLimit 信号,"WS 帧中的 RateLimit 信号检测与处理",§4.21,ersub_openai_ws_handler.erl,P6-01,P2,S,TODO
-P6-04,6-生产,代理,代理管理服务,"ersub_proxy_srv：代理 CRUD、协议支持（HTTP/HTTPS/SOCKS5）",§4.25,ersub_proxy_srv.erl,P1-11,P2,M,TODO
-P6-05,6-生产,代理,代理延迟探测,"定时 probe、延迟缓存、不健康代理标记",§4.25,ersub_proxy_srv.erl,P6-04,P2,M,TODO
-P6-06,6-生产,代理,TLS 指纹伪装,"tls_fingerprint_profiles 表/配置、JA3 hash、请求头伪装",§4.25,ersub_proxy_srv.erl,P6-04,P3,M,TODO
-P6-07,6-生产,代理,代理/TLS 表 migration,"proxies + tls_fingerprint_profiles DDL",§5.2,013_proxy_tls.sql,P1-05,P2,S,TODO
-P6-08,6-生产,健康检测,定时健康检测服务,"ersub_scheduled_test_srv：定时请求、结果记录、auto_recover",§4.26,ersub_scheduled_test_srv.erl,P2-03,P2,L,TODO
-P6-09,6-生产,健康检测,健康检测表 migration,"scheduled_tests DDL",§5.2,014_scheduled_tests.sql,P1-05,P2,S,TODO
-P6-10,6-生产,监控,Channel 监控 runner,"ersub_channel_monitor_runner：定时触发检查",§4.27,ersub_channel_monitor_runner.erl,P3-06,P2,M,TODO
-P6-11,6-生产,监控,Channel 监控 checker,"执行检查请求、记录结果到 histories 表",§4.27,ersub_channel_monitor_checker.erl,P6-10,P2,M,TODO
-P6-12,6-生产,监控,Channel 监控日聚合,"daily_rollups 计算、成功率/延迟统计",§4.27,ersub_channel_monitor_aggregator.erl,P6-11,P2,M,TODO
-P6-13,6-生产,监控,Channel 监控表 migration,"channel_monitors + histories + daily_rollups + request_templates DDL",§5.2,015_channel_monitor.sql,P1-05,P2,S,TODO
-P6-14,6-生产,告警,Ops 告警评估器,"ersub_ops_alert_srv：规则评估、severity 分级、通知发送",§4.33,ersub_ops_alert_srv.erl,P1-01,P2,L,TODO
-P6-15,6-生产,告警,告警静默规则,"ops_alert_silences：静默期管理",§4.33,ersub_ops_alert_srv.erl,P6-14,P2,S,TODO
-P6-16,6-生产,告警,告警表 migration,"ops_alert_rules + ops_alert_silences DDL",§5.2,016_ops_alerts.sql,P1-05,P2,S,TODO
-P6-17,6-生产,CLIPS,规则热更新 API,"POST /api/admin/clips/reload：滚动更新 worker pool 中的规则",§8.2,ersub_admin_handler.erl,P1-14,P1,M,TODO
-P6-18,6-生产,可观测性,健康评分服务,"ersub_health_srv：多维健康评分（DB/CLIPS/upstream）、0-100 分",§4.18,ersub_health_srv.erl,P1-21,P2,M,TODO
-P6-19,6-生产,可观测性,指标聚合服务,"ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度",§4.18,ersub_metrics_srv.erl,P2-13,P2,L,TODO
-P6-20,6-生产,可观测性,指标聚合表 migration,"metrics_aggregated DDL + 索引",§5.2,017_metrics.sql,P1-05,P2,S,TODO
-P6-21,6-生产,可观测性,使用记录定时清理,"ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时",§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,TODO
-P6-22,6-生产,可观测性,Ops 系统日志,"ops_system_logs 表、结构化日志 sink",§4.18,ersub_ops_system_log.erl,P1-11,P3,M,TODO
-P6-23,6-生产,可观测性,系统日志表 migration,"ops_system_logs DDL",§5.2,018_ops_logs.sql,P1-05,P3,S,TODO
-P6-24,6-生产,定价,定价表自动更新,"ersub_pricing_srv：LiteLLM JSON 解析、定时拉取、内嵌 fallback",§4.20,ersub_pricing_srv.erl,P1-03,P1,L,TODO
-P6-25,6-生产,定价,内嵌定价 fallback,"priv/pricing/model_prices.json 编译时打包",§4.20,priv/pricing/model_prices.json,P6-24,P1,S,TODO
-P6-26,6-生产,计费,使用计费去重,"usage_billing_dedup 表、request_id 检查、定期归档",§4.32,ersub_billing_srv.erl,P2-12,P2,M,TODO
-P6-27,6-生产,计费,去重表 migration,"usage_billing_dedup + usage_billing_dedup_archive DDL",§5.2,019_billing_dedup.sql,P1-05,P2,S,TODO
-P6-28,6-生产,安全,安全密钥存储,"security_secrets 表、加密存储、CRUD API",§5.2,ersub_admin_handler.erl,P1-11,P3,M,TODO
-P6-29,6-生产,安全,安全密钥表 migration,"security_secrets DDL",§5.2,020_security_secrets.sql,P1-05,P3,S,TODO
-P6-30,6-生产,管理,账户批量导入,"POST /api/admin/accounts/import：JSON 批量导入、校验、去重",§4.35,ersub_admin_handler.erl,P1-11,P3,M,TODO
-P6-31,6-生产,部署,Dockerfile,"多阶段构建：Erlang 编译 + CLIPS 编译 + 前端构建 + release",§10.3,deploy/Dockerfile,P1-01,P1,M,TODO
-P6-32,6-生产,部署,docker-compose.yml,"ersub + PostgreSQL 服务编排、volume 映射",§10.3,deploy/docker-compose.yml,P6-31,P1,S,TODO
-P6-33,6-生产,部署,Systemd 服务配置,"ersub.service unit 文件",§10.4,deploy/ersub.service,P1-01,P2,S,TODO
-P6-34,6-生产,部署,Release 构建配置,"rebar3 release profile、vm.args 生产参数、BEAM 调优",§10.1,rebar.config config/vm.args,P1-01,P1,M,TODO
-P6-35,6-生产,测试,模拟上游服务器,"ersub_mock_upstream：本地 Cowboy 模拟 Claude/OpenAI API",§13.10,test/support/ersub_mock_upstream.erl,P1-02,P1,M,TODO
-P6-T1,6-生产,测试,E2E 网关测试 — Claude,"Claude /v1/messages 流式/非流式、SSE event 序列验证",§13.6,test/e2e/ersub_gateway_SUITE.erl,P2-18 P6-35,P1,L,TODO
-P6-T2,6-生产,测试,E2E 网关测试 — OpenAI,"OpenAI /v1/chat/completions 流式/非流式",§13.6,test/e2e/ersub_openai_SUITE.erl,P3-01 P6-35,P1,M,TODO
-P6-T3,6-生产,测试,E2E 网关测试 — Gemini,"Gemini /v1beta/* 端点验证",§13.6,test/e2e/ersub_gemini_SUITE.erl,P3-04 P6-35,P2,M,TODO
-P6-T4,6-生产,测试,上游连接池集成测试,"三种隔离策略、LRU 驱逐、inFlight 计数",§13.5,test/integration/ersub_upstream_pool_SUITE.erl,P2-17,P1,M,TODO
-P6-T5,6-生产,测试,调度器属性测试 (PropEr),"任意账户状态下的调度收敛性",§13.7,test/property/ersub_scheduler_prop.erl,P2-06,P2,M,TODO
-P6-T6,6-生产,测试,Makefile 测试 targets,"test-unit / test-integration / test-e2e / test-property / bench / cover / dialyzer",§13.11,Makefile,P1-01,P1,S,TODO
-P6-T7,6-生产,测试,GitHub Actions CI,"unit + integration + property + lint (dialyzer+xref) jobs",§13.11,.github/workflows/ci.yml,P6-T6,P1,M,TODO
-P6-T8,6-生产,测试,RPM 限速单元测试,"滑动窗口正确性、多级限速、fail-open/close",§13.4,test/unit/ersub_rate_limiter_tests.erl,P2-16,P1,S,TODO
-P6-T9,6-生产,测试,ETS 性能基准,"ETS 读写性能、并发负载",§13.8,test/bench/ersub_ets_bench.erl,P1-01,P3,S,TODO
+P2-09,2-核心,计费,CLIPS 计费规则 — token 模式,billing.clp：tier 乘数、长上下文乘数、cache 分级定价、最终成本计算,§4.4,priv/clips/billing.clp,P1-15,P0,L,TODO
+P2-10,2-核心,计费,CLIPS 计费规则 — per_request 模式,per_request 定价 fact + 计算规则,§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
+P2-11,2-核心,计费,CLIPS 计费规则 — image 模式,图片分级定价 (1K/2K/4K)、独立 image_rate_multiplier,§4.4,priv/clips/billing.clp,P2-09,P1,S,TODO
+P2-12,2-核心,计费,计费服务,ersub_billing_srv：余额 ETS 缓存、预检、扣费（原子操作）、DB 定期同步,§4.4,ersub_billing_srv.erl,P1-11 P2-09,P0,L,TODO
+P2-13,2-核心,计费,异步使用日志,ersub_usage_logger：异步写入 usage_logs、批量 flush,§4.4,ersub_usage_logger.erl,P1-11,P0,M,TODO
+P2-14,2-核心,计费,usage_logs 表 migration,usage_logs DDL（含 account_rate_multiplier、billing_model_source、image 字段等）,§5.2,002_usage_logs.sql,P1-05,P0,S,TODO
+P2-15,2-核心,并发,并发控制服务,ersub_concurrency_srv：counters 槽管理、等待队列、process monitor 自动释放,§4.3,ersub_concurrency_srv.erl,P1-01,P0,L,TODO
+P2-16,2-核心,限速,RPM 滑动窗口限速,ersub_rate_limiter：ETS 时间戳列表、per-user/api_key/group 三级、fail-open/close,§4.12,ersub_rate_limiter.erl,P1-01,P1,M,TODO
+P2-17,2-核心,连接池,上游连接池管理,ersub_upstream_pool：gun 连接池、三种隔离策略（proxy/account/account_proxy）、LRU+idle 驱逐,§4.11,ersub_upstream_pool.erl,P1-01,P0,L,TODO
+P2-18,2-核心,网关,Claude handler 完整版,集成调度→并发→计费→流式→failover 完整管道,§3.3,ersub_claude_handler.erl,P2-01 P2-06 P2-12 P2-15,P0,XL,TODO
+P2-T1,2-核心,测试,调度器单元测试,评分算法正确性、top-k 选择、排除列表,§13.4,test/unit/ersub_scheduler_tests.erl,P2-05 P2-06,P0,M,TODO
+P2-T2,2-核心,测试,计费单元测试,token/per_request/image 三模式、tier 乘数、长上下文、rate_multiplier=0,§13.4,test/unit/ersub_billing_tests.erl,P2-09 P2-10 P2-11,P0,M,TODO
+P2-T3,2-核心,测试,并发控制集成测试,槽获取/释放、等待队列、process 崩溃自动释放、队列满拒绝,§13.5,test/integration/ersub_concurrency_SUITE.erl,P2-15,P0,M,TODO
+P2-T4,2-核心,测试,会话粘滞集成测试,ETS TTL 过期、命中刷新、账户不兼容清理,§13.5,test/integration/ersub_session_SUITE.erl,P2-08,P1,S,TODO
+P2-T5,2-核心,测试,CLIPS 调度集成测试,候选账户评分、并发请求隔离、规则热更新,§13.5,test/integration/ersub_clips_SUITE.erl,P2-05,P0,M,TODO
+P2-T6,2-核心,测试,计费属性测试 (PropEr),非负性、rate_multiplier=0 成本为 0、priority 2x 一致性,§13.7,test/property/ersub_billing_prop.erl,P2-09,P1,M,TODO
+P2-T7,2-核心,测试,CLIPS 性能基准,Port 调用延迟测量、并发吞吐量,§13.8,test/bench/ersub_clips_bench.erl,P1-14,P2,S,TODO
+P3-01,3-多平台,网关,OpenAI Chat Completions handler,POST /openai/v1/chat/completions、格式转换、流式兼容,§6.1,ersub_openai_handler.erl,P2-18,P0,L,TODO
+P3-02,3-多平台,网关,OpenAI Responses handler,POST /openai/v1/responses (Codex CLI)、状态管理,§6.1,ersub_openai_responses_handler.erl,P3-01,P1,L,TODO
+P3-03,3-多平台,网关,OpenAI Images handler,POST /openai/v1/images/generations、图片并发限制、成本追踪,§6.1,ersub_openai_images_handler.erl,P3-01 P2-11,P1,M,TODO
+P3-04,3-多平台,网关,Gemini handler,POST /gemini/v1beta/models/*、Claude→Gemini 格式转换,§6.1,ersub_gemini_handler.erl,P2-18,P1,L,TODO
+P3-05,3-多平台,网关,Antigravity handler,POST /antigravity/v1/messages、OAuth token + credit 计费,§6.1,ersub_antigravity_handler.erl,P2-18 P3-10,P2,L,TODO
+P3-06,3-多平台,Channel,Channel 服务,ersub_channel_srv：Channel CRUD、ETS 缓存、定价覆盖查找,§4.8,ersub_channel_srv.erl,P1-11,P0,L,TODO
+P3-07,3-多平台,Channel,channels 表 migration,channels DDL（model_mapping、pricing_override、allowed_models）,§5.2,003_channels.sql,P1-05,P0,S,TODO
+P3-08,3-多平台,Channel,三级模型映射链,Channel→Account→Group 映射、通配符 gpt-* 匹配、mapping chain 记录,§4.8,ersub_request_transform.erl,P3-06 P1-19,P0,L,TODO
+P3-09,3-多平台,Channel,Channel 级定价覆盖,复合 key {GroupId/Platform/Model} ETS 缓存、通配符定价 fallback,§4.8,ersub_channel_srv.erl,P3-06,P1,M,TODO
+P3-10,3-多平台,认证,OAuth Token 后台刷新服务,ersub_token_refresh_srv：定时刷新、401 触发、平台特定 refresher behaviour、cooldown,§4.10,ersub_token_refresh_srv.erl,P2-03,P0,XL,TODO
+P3-11,3-多平台,认证,Claude OAuth refresher,Anthropic OAuth token refresh 实现,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
+P3-12,3-多平台,认证,OpenAI OAuth refresher,OpenAI OAuth token refresh + training opt-out 可选执行,§4.10,ersub_token_refresh_srv.erl,P3-10,P1,M,TODO
+P3-13,3-多平台,错误处理,错误透传规则引擎,CLIPS 规则匹配 status_code+keyword+platform、passthrough/custom 行为,§4.9,priv/clips/error_passthrough.clp,P1-15,P1,M,TODO
+P3-14,3-多平台,错误处理,error_passthrough_rules 表 migration,error_passthrough_rules DDL,§5.2,004_error_passthrough.sql,P1-05,P1,S,TODO
+P3-15,3-多平台,安全,Claude Code 客户端检测,User-Agent 校验 claude-cli/X.Y.Z、metadata originator 检测、codex_cli_only 分组限制,§4.15,ersub_client_detector.erl,P1-16,P1,M,TODO
+P3-16,3-多平台,网关,Cache Control 注入,prompt caching 标识检查、cache_control block 注入请求体,§3.3,ersub_request_transform.erl,P3-08,P2,M,TODO
+P3-17,3-多平台,调度,账户状态转换 CLIPS 规则,account_status.clp：active→rate_limited→overloaded→temp_unschedulable 规则驱动,§4.1,priv/clips/account_status.clp,P1-15 P2-03,P1,M,TODO
+P3-18,3-多平台,调度,模型路由 CLIPS 规则,model_routing.clp：group model pattern→account list 映射,§2.4,priv/clips/model_routing.clp,P1-15,P1,M,TODO
+P3-T1,3-多平台,测试,模型映射单元测试,三级链、通配符匹配、无匹配 fallback、mapping chain 记录,§13.4,test/unit/ersub_model_mapping_tests.erl,P3-08,P0,S,TODO
+P3-T2,3-多平台,测试,错误透传单元测试,规则匹配、body 8KB 截断、platform 过滤,§13.4,test/unit/ersub_error_passthrough_tests.erl,P3-13,P1,S,TODO
+P3-T3,3-多平台,测试,Claude Code 检测单元测试,UA 格式、大小写、metadata originator、codex_cli_only 限制,§13.4,test/unit/ersub_client_detector_tests.erl,P3-15,P1,S,TODO
+P3-T4,3-多平台,测试,Channel 集成测试,Channel CRUD、定价覆盖、复合 key 缓存,§13.5,test/integration/ersub_channel_SUITE.erl,P3-06,P1,M,TODO
+P3-T5,3-多平台,测试,Token 刷新集成测试,定时触发、401 触发、cooldown、缓存失效链,§13.5,test/integration/ersub_token_refresh_SUITE.erl,P3-10,P1,M,TODO
+P4-01,4-管理安全,管理,用户管理 API,GET/PUT /api/user/profile、余额历史、密码修改、2FA 开关,§6.1,ersub_user_handler.erl,P1-11 P1-16,P0,L,TODO
+P4-02,4-管理安全,管理,Admin 管理 API,用户/账户/分组 CRUD、使用统计、仪表盘、设置管理,§6.1,ersub_admin_handler.erl,P1-11 P1-16,P0,XL,TODO
+P4-03,4-管理安全,管理,API Key 管理 API,GET/POST/PUT/DELETE /api/keys、key 生成 (hash+prefix),§6.1,ersub_keys_handler.erl,P1-11,P0,M,TODO
+P4-04,4-管理安全,配额,分组/订阅系统 migration,user_subscriptions 表 DDL,§5.2,005_subscriptions.sql,P1-05,P0,S,TODO
+P4-05,4-管理安全,配额,CLIPS 配额检查规则,quota.clp：日/周/月配额检查、violation 断言、quota-ok 规则,§4.6,priv/clips/quota.clp,P1-15,P0,M,TODO
+P4-06,4-管理安全,配额,配额窗口重置服务,ersub_quota_srv：定时 daily/weekly/monthly 重置,§4.6,ersub_quota_srv (in billing_srv),P2-12 P4-04,P0,M,TODO
+P4-07,4-管理安全,管理,公告系统,announcements + announcement_reads 表、CRUD API、已读追踪,§4.17,ersub_announcement_handler.erl,P1-11,P2,M,TODO
+P4-08,4-管理安全,管理,公告表 migration,announcements、announcement_reads DDL,§5.2,006_announcements.sql,P1-05,P2,S,TODO
+P4-09,4-管理安全,数据库,软删除基础设施,deleted_at 字段、partial unique index、find_active 查询包装,§4.22,ersub_repo.erl,P1-11,P1,M,TODO
+P4-10,4-管理安全,安全,安全响应头中间件,CSP (含 nonce 注入)、x-frame-options、x-content-type-options,§4.16,ersub_security_middleware.erl,P1-02,P1,M,TODO
+P4-11,4-管理安全,安全,CORS 中间件,可配置 allowed_origins、OPTIONS 预检短路、credentials 支持,§4.16,ersub_cors_middleware.erl,P1-02,P1,M,TODO
+P4-12,4-管理安全,安全,URL Allowlist / SSRF 防护,scheme 强制、主机白名单 (通配符)、私有 IP 阻断、DNS Rebinding 防护,§4.14,ersub_url_validator.erl,P1-01,P1,L,TODO
+P4-13,4-管理安全,审核,内容审核服务,ersub_moderation_srv：off/observe/pre_block 三模式、OpenAI API 调用,§4.7,ersub_moderation_srv.erl,P1-02,P2,L,TODO
+P4-14,4-管理安全,审核,内容审核 worker pool,poolboy 异步 worker、SHA256 去重缓存、13类风险评分,§4.7,ersub_moderation_worker.erl ersub_moderation_cache.erl,P4-13,P2,M,TODO
+P4-15,4-管理安全,审核,自动封号,违规次数阈值检查、时间窗口、用户 is_banned 标记,§4.7,ersub_moderation_srv.erl,P4-14,P2,S,TODO
+P4-16,4-管理安全,审核,审核表 migration,moderation_logs DDL（含 content_hash、categories、action_taken）,§5.2,007_moderation.sql,P1-05,P2,S,TODO
+P4-17,4-管理安全,安全,请求体大小限制,Cowboy 中间件：max_body_size 校验,§3.3,ersub_security_middleware.erl,P1-02,P1,S,TODO
+P4-18,4-管理安全,前端,前端集成,sub2api Vue 3 前端 pnpm build → priv/static/、cowboy_static handler,§7,priv/static/,P1-02,P1,M,TODO
+P4-T1,4-管理安全,测试,URL 校验单元测试,SSRF 防护、私有 IP 阻断、DNS Rebinding、通配符白名单,§13.4,test/unit/ersub_url_validator_tests.erl,P4-12,P1,S,TODO
+P4-T2,4-管理安全,测试,配额单元测试,日/周/月配额检查、窗口重置、边界条件,§13.4,test/unit/ersub_quota_tests.erl,P4-05,P0,S,TODO
+P4-T3,4-管理安全,测试,内容审核集成测试,三模式切换、去重缓存、自动封号触发,§13.5,test/integration/ersub_moderation_SUITE.erl,P4-13,P2,M,TODO
+P4-T4,4-管理安全,测试,CIDR 属性测试 (PropEr),任意 IP + CIDR 匹配一致性,§13.7,test/property/ersub_cidr_prop.erl,P1-17,P2,S,TODO
+P5-01,5-运营,认证,JWT 签发与验证,ersub_auth_srv：JWT 签发 (HS256)、过期检查、claim 解析,§6.2,ersub_auth_srv.erl,P1-03,P0,M,TODO
+P5-02,5-运营,认证,OAuth 登录流程,GitHub/Google OAuth2 redirect → callback → JWT 签发,§6.2,ersub_auth_srv.erl,P5-01,P1,L,TODO
+P5-03,5-运营,认证,TOTP 2FA,ersub_totp：secret 生成、QR code URI、verify token,§6.2,ersub_totp.erl,P5-01,P2,M,TODO
+P5-04,5-运营,认证,Pending auth sessions,pending_auth_sessions 表、identity_adoption_decisions、OAuth 注册流程,§6.2,ersub_auth_srv.erl,P5-02,P2,M,TODO
+P5-05,5-运营,认证,auth_identities 表 migration,auth_identities DDL + pending sessions,§5.2,008_auth.sql,P1-05,P1,S,TODO
+P5-06,5-运营,支付,支付订单管理,payment_orders 表、订单生命周期（pending→paid→fulfilled）,§5.2,ersub_payment_srv.erl,P1-11,P1,M,TODO
+P5-07,5-运营,支付,Stripe 集成,Stripe checkout session 创建、webhook 处理、订单确认,§4.34,ersub_stripe.erl,P5-06,P2,L,TODO
+P5-08,5-运营,支付,Alipay 集成,支付宝支付创建、异步回调处理,§4.34,ersub_alipay.erl,P5-06,P2,L,TODO
+P5-09,5-运营,支付,WeChat Pay 集成,微信支付创建、回调处理,§4.34,ersub_wechat.erl,P5-06,P2,L,TODO
+P5-10,5-运营,支付,支付负载均衡,多服务商实例配置、权重分配、payment_provider_instances 表,§5.2,ersub_payment_srv.erl,P5-06,P2,M,TODO
+P5-11,5-运营,支付,支付审计日志,payment_audit_logs 表、幂等性保证,§5.2,009_payment.sql,P1-05,P2,S,TODO
+P5-12,5-运营,支付,支付表 migration,payment_orders + payment_provider_instances + payment_audit_logs DDL,§5.2,009_payment.sql,P1-05,P1,S,TODO
+P5-13,5-运营,运营,兑换码系统,redeem_codes 表、兑换 API、余额充值,§4.24,ersub_redeem_handler.erl,P1-11,P2,M,TODO
+P5-14,5-运营,运营,促销码系统,promo_codes + promo_code_usage 表、折扣计算、使用限制,§4.24,ersub_promo_handler.erl,P1-11,P2,M,TODO
+P5-15,5-运营,运营,兑换码/促销码表 migration,redeem_codes + promo_codes + promo_code_usage DDL,§5.2,010_redeem_promo.sql,P1-05,P2,S,TODO
+P5-16,5-运营,运营,分销返佣系统,ersub_affiliate_srv：aff_code 生成、返佣计算、ledger 记录、冻结/解冻,§4.23,ersub_affiliate_srv.erl,P1-11 P2-12,P2,L,TODO
+P5-17,5-运营,运营,返佣表 migration,user_affiliates + user_affiliate_ledger DDL,§5.2,011_affiliate.sql,P1-05,P2,S,TODO
+P5-18,5-运营,运营,余额通知,ersub_balance_notify_srv：阈值检查（百分比/固定）、邮件发送、每日去重,§4.28,ersub_balance_notify_srv.erl,P2-12,P2,M,TODO
+P5-19,5-运营,运营,自定义页面,Markdown 页面服务（data/pages/{slug}/）、图片资源、路径遍历防护,§4.31,ersub_page_handler.erl,P1-02,P3,M,TODO
+P5-20,5-运营,运营,用户自定义属性,user_attribute_definitions + user_attribute_values 表、API,§4.24,ersub_user_handler.erl,P1-11,P3,M,TODO
+P5-21,5-运营,运营,属性表 migration,user_attribute_definitions + user_attribute_values DDL,§5.2,012_user_attrs.sql,P1-05,P3,S,TODO
+P5-22,5-运营,安全,后端只读模式,Backend Mode Guard 中间件：read_only 时拒绝非 GET 请求,§4.30,ersub_security_middleware.erl,P1-02,P2,S,TODO
+P5-T1,5-运营,测试,认证集成测试,JWT 签发/验证、OAuth 流程、TOTP setup/verify,§13.5,test/integration/ersub_auth_SUITE.erl,P5-01 P5-02,P1,L,TODO
+P5-T2,5-运营,测试,支付集成测试,webhook 处理、订单状态转换、审计日志,§13.5,test/integration/ersub_payment_SUITE.erl,P5-06,P2,M,TODO
+P5-T3,5-运营,测试,返佣单元测试,返佣计算、冻结/解冻、ledger 记录,§13.4,test/unit/ersub_affiliate_tests.erl,P5-16,P2,S,TODO
+P6-01,6-生产,WebSocket,WebSocket v2 handler,cowboy_websocket behaviour、帧级双向中继、协议版本检测,§4.21,ersub_openai_ws_handler.erl,P3-01,P1,XL,TODO
+P6-02,6-生产,WebSocket,WebSocket 连接池,per-account WS 连接池、min/max idle、idle timeout,§4.21,ersub_openai_ws_handler.erl,P6-01,P1,M,TODO
+P6-03,6-生产,WebSocket,WebSocket RateLimit 信号,WS 帧中的 RateLimit 信号检测与处理,§4.21,ersub_openai_ws_handler.erl,P6-01,P2,S,TODO
+P6-04,6-生产,代理,代理管理服务,ersub_proxy_srv：代理 CRUD、协议支持（HTTP/HTTPS/SOCKS5）,§4.25,ersub_proxy_srv.erl,P1-11,P2,M,TODO
+P6-05,6-生产,代理,代理延迟探测,定时 probe、延迟缓存、不健康代理标记,§4.25,ersub_proxy_srv.erl,P6-04,P2,M,TODO
+P6-06,6-生产,代理,TLS 指纹伪装,tls_fingerprint_profiles 表/配置、JA3 hash、请求头伪装,§4.25,ersub_proxy_srv.erl,P6-04,P3,M,TODO
+P6-07,6-生产,代理,代理/TLS 表 migration,proxies + tls_fingerprint_profiles DDL,§5.2,013_proxy_tls.sql,P1-05,P2,S,TODO
+P6-08,6-生产,健康检测,定时健康检测服务,ersub_scheduled_test_srv：定时请求、结果记录、auto_recover,§4.26,ersub_scheduled_test_srv.erl,P2-03,P2,L,TODO
+P6-09,6-生产,健康检测,健康检测表 migration,scheduled_tests DDL,§5.2,014_scheduled_tests.sql,P1-05,P2,S,TODO
+P6-10,6-生产,监控,Channel 监控 runner,ersub_channel_monitor_runner：定时触发检查,§4.27,ersub_channel_monitor_runner.erl,P3-06,P2,M,TODO
+P6-11,6-生产,监控,Channel 监控 checker,执行检查请求、记录结果到 histories 表,§4.27,ersub_channel_monitor_checker.erl,P6-10,P2,M,TODO
+P6-12,6-生产,监控,Channel 监控日聚合,daily_rollups 计算、成功率/延迟统计,§4.27,ersub_channel_monitor_aggregator.erl,P6-11,P2,M,TODO
+P6-13,6-生产,监控,Channel 监控表 migration,channel_monitors + histories + daily_rollups + request_templates DDL,§5.2,015_channel_monitor.sql,P1-05,P2,S,TODO
+P6-14,6-生产,告警,Ops 告警评估器,ersub_ops_alert_srv：规则评估、severity 分级、通知发送,§4.33,ersub_ops_alert_srv.erl,P1-01,P2,L,TODO
+P6-15,6-生产,告警,告警静默规则,ops_alert_silences：静默期管理,§4.33,ersub_ops_alert_srv.erl,P6-14,P2,S,TODO
+P6-16,6-生产,告警,告警表 migration,ops_alert_rules + ops_alert_silences DDL,§5.2,016_ops_alerts.sql,P1-05,P2,S,TODO
+P6-17,6-生产,CLIPS,规则热更新 API,POST /api/admin/clips/reload：滚动更新 worker pool 中的规则,§8.2,ersub_admin_handler.erl,P1-14,P1,M,TODO
+P6-18,6-生产,可观测性,健康评分服务,ersub_health_srv：多维健康评分（DB/CLIPS/upstream）、0-100 分,§4.18,ersub_health_srv.erl,P1-21,P2,M,TODO
+P6-19,6-生产,可观测性,指标聚合服务,ersub_metrics_srv：per-model/account/user/group 聚合、1min/5min/1h/1d 粒度,§4.18,ersub_metrics_srv.erl,P2-13,P2,L,TODO
+P6-20,6-生产,可观测性,指标聚合表 migration,metrics_aggregated DDL + 索引,§5.2,017_metrics.sql,P1-05,P2,S,TODO
+P6-21,6-生产,可观测性,使用记录定时清理,ersub_usage_cleanup_srv：按保留天数清理、凌晨 3 点定时,§4.18,ersub_usage_cleanup_srv.erl,P1-11,P2,S,TODO
+P6-22,6-生产,可观测性,Ops 系统日志,ops_system_logs 表、结构化日志 sink,§4.18,ersub_ops_system_log.erl,P1-11,P3,M,TODO
+P6-23,6-生产,可观测性,系统日志表 migration,ops_system_logs DDL,§5.2,018_ops_logs.sql,P1-05,P3,S,TODO
+P6-24,6-生产,定价,定价表自动更新,ersub_pricing_srv：LiteLLM JSON 解析、定时拉取、内嵌 fallback,§4.20,ersub_pricing_srv.erl,P1-03,P1,L,TODO
+P6-25,6-生产,定价,内嵌定价 fallback,priv/pricing/model_prices.json 编译时打包,§4.20,priv/pricing/model_prices.json,P6-24,P1,S,TODO
+P6-26,6-生产,计费,使用计费去重,usage_billing_dedup 表、request_id 检查、定期归档,§4.32,ersub_billing_srv.erl,P2-12,P2,M,TODO
+P6-27,6-生产,计费,去重表 migration,usage_billing_dedup + usage_billing_dedup_archive DDL,§5.2,019_billing_dedup.sql,P1-05,P2,S,TODO
+P6-28,6-生产,安全,安全密钥存储,security_secrets 表、加密存储、CRUD API,§5.2,ersub_admin_handler.erl,P1-11,P3,M,TODO
+P6-29,6-生产,安全,安全密钥表 migration,security_secrets DDL,§5.2,020_security_secrets.sql,P1-05,P3,S,TODO
+P6-30,6-生产,管理,账户批量导入,POST /api/admin/accounts/import：JSON 批量导入、校验、去重,§4.35,ersub_admin_handler.erl,P1-11,P3,M,TODO
+P6-31,6-生产,部署,Dockerfile,多阶段构建：Erlang 编译 + CLIPS 编译 + 前端构建 + release,§10.3,deploy/Dockerfile,P1-01,P1,M,TODO
+P6-32,6-生产,部署,docker-compose.yml,ersub + PostgreSQL 服务编排、volume 映射,§10.3,deploy/docker-compose.yml,P6-31,P1,S,TODO
+P6-33,6-生产,部署,Systemd 服务配置,ersub.service unit 文件,§10.4,deploy/ersub.service,P1-01,P2,S,TODO
+P6-34,6-生产,部署,Release 构建配置,rebar3 release profile、vm.args 生产参数、BEAM 调优,§10.1,rebar.config config/vm.args,P1-01,P1,M,TODO
+P6-35,6-生产,测试,模拟上游服务器,ersub_mock_upstream：本地 Cowboy 模拟 Claude/OpenAI API,§13.10,test/support/ersub_mock_upstream.erl,P1-02,P1,M,TODO
+P6-T1,6-生产,测试,E2E 网关测试 — Claude,Claude /v1/messages 流式/非流式、SSE event 序列验证,§13.6,test/e2e/ersub_gateway_SUITE.erl,P2-18 P6-35,P1,L,TODO
+P6-T2,6-生产,测试,E2E 网关测试 — OpenAI,OpenAI /v1/chat/completions 流式/非流式,§13.6,test/e2e/ersub_openai_SUITE.erl,P3-01 P6-35,P1,M,TODO
+P6-T3,6-生产,测试,E2E 网关测试 — Gemini,Gemini /v1beta/* 端点验证,§13.6,test/e2e/ersub_gemini_SUITE.erl,P3-04 P6-35,P2,M,TODO
+P6-T4,6-生产,测试,上游连接池集成测试,三种隔离策略、LRU 驱逐、inFlight 计数,§13.5,test/integration/ersub_upstream_pool_SUITE.erl,P2-17,P1,M,TODO
+P6-T5,6-生产,测试,调度器属性测试 (PropEr),任意账户状态下的调度收敛性,§13.7,test/property/ersub_scheduler_prop.erl,P2-06,P2,M,TODO
+P6-T6,6-生产,测试,Makefile 测试 targets,test-unit / test-integration / test-e2e / test-property / bench / cover / dialyzer,§13.11,Makefile,P1-01,P1,S,TODO
+P6-T7,6-生产,测试,GitHub Actions CI,unit + integration + property + lint (dialyzer+xref) jobs,§13.11,.github/workflows/ci.yml,P6-T6,P1,M,TODO
+P6-T8,6-生产,测试,RPM 限速单元测试,滑动窗口正确性、多级限速、fail-open/close,§13.4,test/unit/ersub_rate_limiter_tests.erl,P2-16,P1,S,TODO
+P6-T9,6-生产,测试,ETS 性能基准,ETS 读写性能、并发负载,§13.8,test/bench/ersub_ets_bench.erl,P1-01,P3,S,TODO

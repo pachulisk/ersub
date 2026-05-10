@@ -6,8 +6,8 @@ routes() ->
     Stub = ersub_stub_handler,
     [
         {'_', [
-            %% Gateway endpoints (stubs until implemented)
-            {"/v1/messages", Stub, []},
+            %% Gateway endpoints
+            {"/v1/messages", ersub_claude_handler, []},
             {"/openai/v1/chat/completions", Stub, []},
             {"/openai/v1/responses", Stub, []},
             {"/openai/v1/images/generations", Stub, []},
