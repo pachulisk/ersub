@@ -9,8 +9,8 @@ H3,P1,HIGH,实现定价表HTTP fetch+parse,ersub_pricing_srv fetch_and_parse返�
 H4,P1,HIGH,OAuth redirect_uri从config读取,硬编码localhost:8080，改为从ersub_config_srv读取base_url拼接,src/admin/ersub_auth_handler.erl,S,DONE
 H5,P1,HIGH,余额通知增加邮件发送占位,当前只logger:info，增加邮件发送接口（可先用logger:notice标记为待实现）,src/billing/ersub_balance_notify_srv.erl,S,DONE
 H6,P1,HIGH,补全ersub.yaml缺失配置项,约20个代码读取的config key在YAML中缺失（moderation/payment/security/ops/backend_mode等）,config/ersub.yaml,S,DONE
-M1,P2,MEDIUM,Stripe webhook签名完善,解析Stripe-Signature头的t=timestamp v1=signature格式，增加时间窗口校验防重放,src/payment/ersub_stripe.erl,M,TODO
+M1,P2,MEDIUM,Stripe webhook签名完善,解析Stripe-Signature头的t=timestamp v1=signature格式，增加时间窗口校验防重放,src/payment/ersub_stripe.erl,M,DONE
 M2,P2,MEDIUM,内容审核API错误不再静默放行,moderation_srv API失败时改为记录并返回error而非默认clean,src/moderation/ersub_moderation_srv.erl,S,DONE
-M3,P2,MEDIUM,Repo层补充缺失表的CRUD,user_subscriptions/channels/redeem_codes/promo_codes增加基本CRUD函数,src/db/ersub_repo.erl,M,TODO
-M4,P2,MEDIUM,计费路径调用billing_dedup,在非流式计费扣款前调用check_and_mark防重复计费,src/gateway/ersub_claude_handler.erl src/billing/ersub_billing_dedup.erl,S,TODO
+M3,P2,MEDIUM,Repo层补充缺失表的CRUD,user_subscriptions/channels/redeem_codes/promo_codes增加基本CRUD函数,src/db/ersub_repo.erl,M,DONE
+M4,P2,MEDIUM,计费路径调用billing_dedup,在非流式计费扣款前调用check_and_mark防重复计费,src/gateway/ersub_claude_handler.erl src/billing/ersub_billing_dedup.erl,S,DONE
 M5,P2,MEDIUM,清理stub_handler和_Stub变量,删除ersub_stub_handler.erl，清理router中_Stub变量,src/gateway/ersub_stub_handler.erl src/ersub_router.erl,S,DONE
