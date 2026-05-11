@@ -21,42 +21,62 @@ get_metrics() ->
     Keys = [select_total, sticky_hit, lb_select, account_switch],
     maps:from_list([{K, read_counter(K)} || K <- Keys]).
 
-%% Select the best account for a request.
-%% Checks sticky session first, then scores candidates.
+%% CL03: Select account using CLIPS-driven selection layer ordering.
+%% The selection layers (previous_response_id, session_hash, clips_score)
+%% are defined as CLIPS facts and can be reordered/disabled at runtime.
 -spec select_account(map()) -> {ok, map()} | {error, no_available_account}.
 select_account(Req) ->
     bump_counter(select_total),
-    #{user_id := UserId} = Req,
-    PrevRespId = maps:get(previous_response_id, Req, <<>>),
-    SessionHash = maps:get(session_hash, Req, <<>>),
-    ExcludedIds = maps:get(excluded_ids, Req, #{}),
-
-    %% Layer 0: PreviousResponseID stickiness (OpenAI Responses)
-    case PrevRespId =/= <<>> andalso ersub_session_srv:lookup(UserId, PrevRespId) of
-        {ok, AccountId0} when not is_map_key(AccountId0, ExcludedIds) ->
-            case get_account_if_schedulable(AccountId0) of
-                {ok, Account} ->
-                    bump_counter(sticky_hit),
-                    {ok, Account};
-                _ -> select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req)
-            end;
+    %% Get ordered selection layers from CLIPS
+    Layers = case ersub_clips_pool:get_selection_layers() of
+        {ok, L} when is_list(L), length(L) > 0 -> L;
         _ ->
-            select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req)
+            %% Fallback: default order if CLIPS unavailable
+            [#{type => <<"previous_response_id">>, priority => 0},
+             #{type => <<"session_hash">>, priority => 1},
+             #{type => <<"clips_score">>, priority => 2}]
+    end,
+    execute_selection_layers(Layers, Req).
+
+execute_selection_layers([], Req) ->
+    %% All layers exhausted, fall back to CLIPS scoring
+    select_by_score(Req);
+execute_selection_layers([#{type := Type} | Rest], Req) ->
+    #{user_id := UserId} = Req,
+    ExcludedIds = maps:get(excluded_ids, Req, #{}),
+    case try_selection_layer(Type, UserId, ExcludedIds, Req) of
+        {ok, Account} ->
+            bump_counter(sticky_hit),
+            {ok, Account};
+        miss ->
+            execute_selection_layers(Rest, Req)
     end.
 
-select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req) ->
-    %% Layer 1: Session hash stickiness
+try_selection_layer(<<"previous_response_id">>, UserId, ExcludedIds, Req) ->
+    PrevRespId = maps:get(previous_response_id, Req, <<>>),
+    case PrevRespId =/= <<>> andalso ersub_session_srv:lookup(UserId, PrevRespId) of
+        {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
+            case get_account_if_schedulable(AccountId) of
+                {ok, Account} -> {ok, Account};
+                _ -> miss
+            end;
+        _ -> miss
+    end;
+try_selection_layer(<<"session_hash">>, UserId, ExcludedIds, Req) ->
+    SessionHash = maps:get(session_hash, Req, <<>>),
     case SessionHash =/= <<>> andalso ersub_session_srv:lookup(UserId, SessionHash) of
         {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
             case get_account_if_schedulable(AccountId) of
-                {ok, Account} ->
-                    bump_counter(sticky_hit),
-                    {ok, Account};
-                _ -> select_by_score(Req)
+                {ok, Account} -> {ok, Account};
+                _ -> miss
             end;
-        _ ->
-            select_by_score(Req)
-    end.
+        _ -> miss
+    end;
+try_selection_layer(<<"clips_score">>, _UserId, _ExcludedIds, Req) ->
+    %% This layer delegates to CLIPS scheduling.clp scoring
+    select_by_score(Req);
+try_selection_layer(_, _, _, _) ->
+    miss.
 
 %% Select with automatic failover on retriable errors.
 -spec select_with_failover(map(), fun((map()) -> {ok, term()} | {error, term()})) ->

@@ -374,6 +374,25 @@ handle_call({check_retriable, Code}, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
+%% === 15. GET SELECTION LAYERS (CL03) ===
+handle_call(get_selection_layers, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = [<<"(selection-layer-request)">>],
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Layers = [#{type => maps:get(<<"type">>, F),
+                        priority => maps:get(<<"priority">>, F)}
+                      || F <- AllFacts,
+                         maps:get(<<"template">>, F, <<>>) =:= <<"selection-layer-result">>],
+            Sorted = lists:sort(fun(A, B) ->
+                maps:get(priority, A) =< maps:get(priority, B)
+            end, Layers),
+            {reply, {ok, Sorted}, S3};
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),

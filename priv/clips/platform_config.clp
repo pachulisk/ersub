@@ -208,3 +208,87 @@
 (deffacts default-dedup-config
     (dedup-config)
 )
+
+;; === CL09: CSP Policy Directives ===
+
+(deftemplate csp-directive
+    (slot name (type STRING))
+    (slot value (type STRING))
+)
+
+(deffacts default-csp-directives
+    (csp-directive (name "default-src") (value "'self'"))
+    (csp-directive (name "script-src") (value "'self' https://challenges.cloudflare.com"))
+    (csp-directive (name "style-src") (value "'self' 'unsafe-inline' https://fonts.googleapis.com"))
+    (csp-directive (name "img-src") (value "'self' data: https:"))
+    (csp-directive (name "font-src") (value "'self' data:"))
+    (csp-directive (name "frame-src") (value "https://challenges.cloudflare.com https://*.stripe.com"))
+    (csp-directive (name "frame-ancestors") (value "'none'"))
+    (csp-directive (name "form-action") (value "'self'"))
+    (csp-directive (name "base-uri") (value "'self'"))
+)
+
+;; === CL10: CORS Configuration ===
+
+(deftemplate cors-config
+    (slot allowed-methods (type STRING) (default "GET, POST, PUT, DELETE, OPTIONS"))
+    (slot allowed-headers (type STRING) (default "Content-Type, Authorization, x-api-key, anthropic-version, anthropic-beta"))
+    (slot max-age (type STRING) (default "86400"))
+    (slot allow-credentials (type SYMBOL) (default TRUE))
+)
+
+(deffacts default-cors-config
+    (cors-config)
+)
+
+;; === CL17: Password Hash Configuration ===
+
+(deftemplate password-config
+    (slot algorithm (type STRING) (default "pbkdf2_sha256"))
+    (slot iterations (type INTEGER) (default 100000))
+    (slot key-length (type INTEGER) (default 32))
+    (slot salt-length (type INTEGER) (default 16))
+)
+
+(deffacts default-password-config
+    (password-config)
+)
+
+;; === CL03: Selection Layer Configuration ===
+
+(deftemplate selection-layer
+    (slot priority (type INTEGER))
+    (slot type (type STRING))          ;; "previous_response_id" | "session_hash" | "clips_score"
+    (slot enabled (type SYMBOL) (default TRUE))
+)
+
+(deffacts default-selection-layers
+    (selection-layer (priority 0) (type "previous_response_id") (enabled TRUE))
+    (selection-layer (priority 1) (type "session_hash") (enabled TRUE))
+    (selection-layer (priority 2) (type "clips_score") (enabled TRUE))
+)
+
+;; Rule: get ordered selection layers
+(deftemplate selection-layer-request)
+(deftemplate selection-layer-result
+    (slot type (type STRING))
+    (slot priority (type INTEGER))
+)
+
+(defrule resolve-selection-layers
+    (selection-layer-request)
+    (selection-layer (priority ?p) (type ?t) (enabled TRUE))
+    =>
+    (assert (selection-layer-result (type ?t) (priority ?p)))
+)
+
+;; === CL13: Default Model Family Dispatch Mappings ===
+
+(deffacts default-dispatch-mappings
+    (dispatch-mapping (from-model "claude-opus") (to-model "gpt-5.4"))
+    (dispatch-mapping (from-model "claude-sonnet") (to-model "gpt-5.3"))
+    (dispatch-mapping (from-model "claude-haiku") (to-model "gpt-5.4-mini"))
+    (dispatch-mapping (from-model "gpt-5.4") (to-model "claude-opus"))
+    (dispatch-mapping (from-model "gpt-5.3") (to-model "claude-sonnet"))
+    (dispatch-mapping (from-model "gpt-5.4-mini") (to-model "claude-haiku"))
+)

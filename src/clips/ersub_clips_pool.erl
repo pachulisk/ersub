@@ -10,7 +10,7 @@
 -export([evaluate_moderation/1, evaluate_refund_transition/1,
          evaluate_messages_dispatch/1]).
 %% Configuration query APIs
--export([get_platform_config/1, check_retriable/1]).
+-export([get_platform_config/1, check_retriable/1, get_selection_layers/0]).
 %% Channel filter API
 -export([filter_channels/1]).
 %% Subscription validation API
@@ -136,3 +136,10 @@ check_retriable(Code) ->
         {ok, true} -> true;
         _ -> false
     end.
+
+%% CL03: Get ordered selection layers from CLIPS.
+-spec get_selection_layers() -> {ok, [map()]} | {error, term()}.
+get_selection_layers() ->
+    with_worker(fun(W) ->
+        gen_server:call(W, get_selection_layers, 5000)
+    end).
