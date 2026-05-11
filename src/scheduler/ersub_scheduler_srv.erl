@@ -17,10 +17,23 @@ start_link() ->
 -spec select_account(map()) -> {ok, map()} | {error, no_available_account}.
 select_account(Req) ->
     #{user_id := UserId} = Req,
+    PrevRespId = maps:get(previous_response_id, Req, <<>>),
     SessionHash = maps:get(session_hash, Req, <<>>),
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
 
-    %% Layer 1: Sticky session check
+    %% Layer 0: PreviousResponseID stickiness (OpenAI Responses)
+    case PrevRespId =/= <<>> andalso ersub_session_srv:lookup(UserId, PrevRespId) of
+        {ok, AccountId0} when not is_map_key(AccountId0, ExcludedIds) ->
+            case get_account_if_schedulable(AccountId0) of
+                {ok, Account} -> {ok, Account};
+                _ -> select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req)
+            end;
+        _ ->
+            select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req)
+    end.
+
+select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req) ->
+    %% Layer 1: Session hash stickiness
     case SessionHash =/= <<>> andalso ersub_session_srv:lookup(UserId, SessionHash) of
         {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
             case get_account_if_schedulable(AccountId) of
@@ -71,12 +84,23 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
                     ersub_account_srv:record_success(AccountId, 0),
                     {ok, Result};
                 {error, {http, Code}} when Code =:= 429; Code =:= 502; Code =:= 503; Code =:= 529 ->
-                    %% Retriable error — mark account and try next
                     ersub_account_srv:record_error(AccountId, Code),
-                    logger:warning("Account ~p returned ~p, failover attempt ~p/~p",
-                                   [AccountId, Code, Attempt + 1, MaxSwitches]),
-                    NewExcluded = Excluded#{AccountId => true},
-                    do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
+                    %% pool_mode: retry same account before switching
+                    PoolMode = maps:get(pool_mode, Account, false),
+                    PoolRetries = maps:get(pool_retry_count, Account, 3),
+                    PoolAttempt = maps:get({pool_attempt, AccountId}, Excluded, 0),
+                    case PoolMode =:= true andalso PoolAttempt < PoolRetries of
+                        true ->
+                            logger:warning("Account ~p pool_mode retry ~p/~p (code ~p)",
+                                           [AccountId, PoolAttempt + 1, PoolRetries, Code]),
+                            NewExcluded = Excluded#{{pool_attempt, AccountId} => PoolAttempt + 1},
+                            do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
+                        false ->
+                            logger:warning("Account ~p returned ~p, switching (attempt ~p/~p)",
+                                           [AccountId, Code, Attempt + 1, MaxSwitches]),
+                            NewExcluded = Excluded#{AccountId => true},
+                            do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches)
+                    end;
                 {error, Reason} ->
                     %% Non-retriable error
                     {error, Reason}

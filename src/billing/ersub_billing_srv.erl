@@ -64,7 +64,7 @@ init([]) ->
     ets:new(?BALANCE_TABLE, [named_table, public, set, {write_concurrency, true}]),
     schedule_sync(),
     logger:info("Billing service started"),
-    {ok, #{pending_syncs => #{}}}.
+    {ok, #{pending_syncs => #{}, circuit => closed, failures => 0}}.
 
 handle_call({sync_balance, UserId}, _From, State) ->
     do_sync_user(UserId),
@@ -78,24 +78,58 @@ handle_cast({sync_deduct, UserId, Cost}, #{pending_syncs := PS} = State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(sync_timer, #{pending_syncs := PS} = State) ->
-    case maps:size(PS) of
-        0 -> ok;
-        N ->
-            maps:foreach(fun(UserId, TotalCost) ->
-                case ersub_repo:update_user_balance(UserId, -TotalCost) of
-                    {ok, _} -> ok;
-                    {error, Reason} ->
-                        logger:error("Balance sync failed for user ~p: ~p",
-                                     [UserId, Reason])
-                end
-            end, PS),
-            logger:debug("Synced balances for ~p users", [N])
+handle_info(sync_timer, #{pending_syncs := PS, circuit := Circuit, failures := Fails} = State) ->
+    NewState = case {maps:size(PS), Circuit} of
+        {0, _} ->
+            State;
+        {_, open} when Fails > 0 ->
+            %% Circuit open: try one sync (half-open)
+            case try_sync_one(PS) of
+                ok ->
+                    logger:info("Circuit breaker: half-open → closed"),
+                    do_sync_all(PS),
+                    State#{pending_syncs => #{}, circuit => closed, failures => 0};
+                error ->
+                    logger:warning("Circuit breaker: still open (failure ~p)", [Fails]),
+                    State  %% Keep pending, retry next cycle
+            end;
+        {_, _} ->
+            %% Normal or closed: sync all
+            FailCount = do_sync_all(PS),
+            case FailCount of
+                0 ->
+                    State#{pending_syncs => #{}, circuit => closed, failures => 0};
+                _ when Fails + FailCount >= 5 ->
+                    logger:error("Circuit breaker: closed → open (~p consecutive failures)", [Fails + FailCount]),
+                    State#{pending_syncs => #{}, circuit => open, failures => Fails + FailCount};
+                _ ->
+                    State#{pending_syncs => #{}, failures => Fails + FailCount}
+            end
     end,
     schedule_sync(),
-    {noreply, State#{pending_syncs => #{}}}.
+    {noreply, NewState}.
 
 %%% Internal
+
+do_sync_all(PS) ->
+    maps:fold(fun(UserId, TotalCost, FailAcc) ->
+        case ersub_repo:update_user_balance(UserId, -TotalCost) of
+            {ok, _} -> FailAcc;
+            {error, Reason} ->
+                logger:error("Balance sync failed for user ~p: ~p", [UserId, Reason]),
+                FailAcc + 1
+        end
+    end, 0, PS).
+
+try_sync_one(PS) ->
+    case maps:to_list(PS) of
+        [{UserId, Cost} | _] ->
+            case ersub_repo:update_user_balance(UserId, -Cost) of
+                {ok, _} -> ok;
+                _ -> error
+            end;
+        [] -> ok
+    end.
 
 load_balance_from_db(UserId) ->
     case ersub_repo:get_user_balance(UserId) of

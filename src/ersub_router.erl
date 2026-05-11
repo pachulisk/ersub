@@ -6,6 +6,8 @@ routes() ->
     [
         {'_', [
             %% Gateway endpoints
+            {"/v1/models/[...]", ersub_models_handler, []},
+            {"/v1/models", ersub_models_handler, []},
             {"/v1/messages", ersub_claude_handler, []},
             {"/openai/v1/chat/completions", ersub_openai_handler, []},
             {"/openai/v1/responses", ersub_openai_responses_handler, []},

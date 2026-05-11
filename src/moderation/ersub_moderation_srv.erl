@@ -26,7 +26,14 @@ check_content(UserId, Content) ->
         off ->
             ok;
         _ ->
-            gen_server:call(?SERVER, {check, UserId, Content, Mode}, 30000)
+            %% Sampling: only check a percentage of requests
+            SampleRate = ersub_config_srv:get(moderation_sample_rate, 100),
+            case rand:uniform(100) =< SampleRate of
+                true ->
+                    gen_server:call(?SERVER, {check, UserId, Content, Mode}, 30000);
+                false ->
+                    ok  %% Skipped by sampling
+            end
     end.
 
 %%% gen_server callbacks

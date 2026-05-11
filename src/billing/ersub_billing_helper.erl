@@ -54,12 +54,19 @@ extract_usage(Body) when is_binary(Body) ->
     end;
 extract_usage(_) -> #{}.
 
-extract_usage_from_json(#{<<"usage">> := U}) when is_map(U) ->
+extract_usage_from_json(#{<<"usage">> := U} = Json) when is_map(U) ->
+    ServiceTier = case maps:get(<<"service_tier">>, Json, undefined) of
+        undefined -> standard;
+        <<"priority">> -> priority;
+        <<"flex">> -> flex;
+        _ -> standard
+    end,
     #{
         input_tokens => maps:get(<<"input_tokens">>, U, 0),
         output_tokens => maps:get(<<"output_tokens">>, U, 0),
         cache_read_tokens => maps:get(<<"cache_read_input_tokens">>, U, 0),
-        cache_creation_tokens => maps:get(<<"cache_creation_input_tokens">>, U, 0)
+        cache_creation_tokens => maps:get(<<"cache_creation_input_tokens">>, U, 0),
+        service_tier => ServiceTier
     };
 extract_usage_from_json(#{<<"usage">> := #{<<"prompt_tokens">> := PT,
                                            <<"completion_tokens">> := CT}}) ->
