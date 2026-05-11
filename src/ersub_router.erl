@@ -3,7 +3,6 @@
 -export([routes/0, start_listener/0, stop_listener/0]).
 
 routes() ->
-    _Stub = ersub_stub_handler,
     [
         {'_', [
             %% Gateway endpoints

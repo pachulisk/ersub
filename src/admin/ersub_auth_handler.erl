@@ -109,7 +109,7 @@ get_oauth_config(<<"github">>) ->
                 auth_url => <<"https://github.com/login/oauth/authorize">>,
                 token_url => <<"https://github.com/login/oauth/access_token">>,
                 user_url => <<"https://api.github.com/user">>,
-                redirect_uri => <<"http://localhost:8080/api/auth/oauth/github/callback">>,
+                redirect_uri => build_redirect_uri(<<"github">>),
                 scope => <<"read:user user:email">>
             }}
     end;
@@ -173,6 +173,18 @@ fetch_oauth_user(#{user_url := UserUrl}, AccessToken) ->
         _ ->
             {error, user_fetch_failed}
     end.
+
+build_redirect_uri(Provider) ->
+    Host = ersub_config_srv:get(server_host, "0.0.0.0"),
+    Port = ersub_config_srv:get(server_port, 8080),
+    BaseUrl = ersub_config_srv:get(server_base_url, undefined),
+    Base = case BaseUrl of
+        undefined ->
+            iolist_to_binary(io_lib:format("http://~s:~p", [Host, Port]));
+        U when is_list(U) -> list_to_binary(U);
+        U when is_binary(U) -> U
+    end,
+    <<Base/binary, "/api/auth/oauth/", Provider/binary, "/callback">>.
 
 to_bin(V) when is_binary(V) -> V;
 to_bin(V) when is_list(V) -> list_to_binary(V);

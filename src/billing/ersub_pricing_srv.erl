@@ -72,10 +72,37 @@ do_update() ->
         _ -> ok
     end.
 
-fetch_and_parse(_Url) ->
-    %% TODO: HTTP fetch + LiteLLM JSON parsing
-    %% For now, rely on embedded fallback
-    {error, not_implemented}.
+fetch_and_parse(Url) when is_list(Url) ->
+    fetch_and_parse(list_to_binary(Url));
+fetch_and_parse(Url) when is_binary(Url) ->
+    case ersub_upstream_pool:request(<<"GET">>, Url, [], <<>>, #{}, 15000) of
+        {ok, 200, _, Body} ->
+            parse_litellm_pricing(Body);
+        {ok, Status, _, _} ->
+            {error, {http_status, Status}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+parse_litellm_pricing(Body) ->
+    try
+        Json = jsx:decode(Body, [return_maps]),
+        Count = maps:fold(fun(ModelName, Info, Acc) when is_map(Info) ->
+            Pricing = #{
+                input_price => maps:get(<<"input_cost_per_token">>, Info, 0),
+                output_price => maps:get(<<"output_cost_per_token">>, Info, 0),
+                cache_read_price => maps:get(<<"cache_read_input_token_cost">>, Info, 0),
+                cache_creation_price => maps:get(<<"cache_creation_input_token_cost">>, Info, 0),
+                supports_prompt_caching => maps:get(<<"supports_prompt_caching">>, Info, false)
+            },
+            ets:insert(?TABLE, {ModelName, Pricing}),
+            Acc + 1;
+        (_, _, Acc) -> Acc
+        end, 0, Json),
+        {ok, Count}
+    catch _:Reason ->
+        {error, {parse_failed, Reason}}
+    end.
 
 load_embedded_fallback() ->
     Fallback = embedded_pricing(),

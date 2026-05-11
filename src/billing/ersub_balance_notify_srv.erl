@@ -54,8 +54,15 @@ do_check(UserId) ->
                                 null -> [];
                                 _ -> try jsx:decode(EmailsJson) catch _:_ -> [] end
                             end,
-                            logger:info("Balance notification: user=~p balance=~p threshold=~p emails=~p",
-                                       [UserId, BalanceFloat, ThresholdFloat, Emails]);
+                            %% TODO: Implement actual email sending (SMTP/SES)
+                            %% For now, log at notice level for monitoring visibility
+                            logger:notice("BALANCE_ALERT: user=~p balance=$~.2f threshold=$~.2f emails=~p",
+                                          [UserId, BalanceFloat, ThresholdFloat, Emails]),
+                            ersub_system_log:log(<<"warning">>, <<"balance_notify">>,
+                                iolist_to_binary(io_lib:format("User ~p balance $~.2f below threshold $~.2f",
+                                    [UserId, BalanceFloat, ThresholdFloat])),
+                                #{user_id => UserId, balance => BalanceFloat,
+                                  threshold => ThresholdFloat, emails => Emails});
                         _ ->
                             ok
                     end;

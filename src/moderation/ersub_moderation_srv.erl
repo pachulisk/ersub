@@ -155,13 +155,12 @@ call_moderation_api_http(Url, Content) ->
                 false ->
                     clean
             end;
-        {ok, _Status, _, _} ->
-            %% Non-200 from moderation API, default to clean to avoid blocking
-            logger:warning("Moderation API returned non-200, passing through"),
-            clean;
+        {ok, Status, _, ErrBody} ->
+            logger:error("Moderation API returned ~p: ~s", [Status, ErrBody]),
+            {error, {moderation_api_error, Status}};
         {error, Reason} ->
-            logger:warning("Moderation API call failed: ~p, passing through", [Reason]),
-            clean
+            logger:error("Moderation API call failed: ~p", [Reason]),
+            {error, {moderation_api_down, Reason}}
     end.
 
 record_log(UserId, ContentHash, Result) ->
