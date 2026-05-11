@@ -239,6 +239,260 @@ handle(<<"GET">>, [<<"export">>, <<"users">>], Req0, State, _Claims) ->
             reply_err(500, Reason, Req0, State)
     end;
 
+%% === Ops Settings ===
+
+%% GET /api/v1/admin/ops/settings
+handle(<<"GET">>, [<<"ops">>, <<"settings">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT key, value FROM settings WHERE key LIKE 'ops_%' ORDER BY key"
+    ) of
+        {ok, _, Rows} ->
+            Settings = maps:from_list([{K, jsx:decode(V, [return_maps])} || {K, V} <- Rows]),
+            reply_ok(#{data => Settings}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% PUT /api/v1/admin/ops/settings
+handle(<<"PUT">>, [<<"ops">>, <<"settings">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Results = maps:fold(fun(Key, Value, Acc) ->
+        FullKey = <<"ops_", Key/binary>>,
+        case ersub_repo:upsert_setting(FullKey, Value) of
+            {ok, _} ->
+                ersub_config_srv:set(binary_to_atom(FullKey), Value),
+                Acc;
+            {error, R} ->
+                [{Key, R} | Acc]
+        end
+    end, [], Params),
+    case Results of
+        [] -> reply_ok(#{success => true}, Req1, State);
+        Errors ->
+            ErrMap = maps:from_list([{K, iolist_to_binary(io_lib:format("~p", [R]))}
+                                     || {K, R} <- Errors]),
+            reply_err(400, ErrMap, Req1, State)
+    end;
+
+%% === Channel Monitor ===
+
+%% GET /api/v1/channels/:id/monitor
+handle(<<"GET">>, [Id, <<"monitor">>], Req0, State, _Claims) ->
+    ChannelId = binary_to_integer(Id),
+    case ersub_repo:query(
+        "SELECT h.id, h.monitor_id, h.status_code, h.latency_ms, h.is_success, "
+        "h.error_message, h.checked_at "
+        "FROM channel_monitor_histories h "
+        "JOIN channel_monitors m ON m.id = h.monitor_id "
+        "WHERE m.channel_id = $1 "
+        "ORDER BY h.checked_at DESC LIMIT 50",
+        [ChannelId]
+    ) of
+        {ok, _, Rows} ->
+            Histories = [#{id => HId, monitor_id => MId, status_code => SC,
+                           latency_ms => LMs, is_success => Succ,
+                           error_message => EMsg, checked_at => CA}
+                         || {HId, MId, SC, LMs, Succ, EMsg, CA} <- Rows],
+            reply_ok(#{data => Histories}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% === Usage Analytics ===
+
+%% GET /api/v1/admin/usage/stats
+handle(<<"GET">>, [<<"usage">>, <<"stats">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT COUNT(*), COALESCE(SUM(actual_cost), 0), "
+        "COALESCE(AVG(duration_ms), 0) FROM usage_logs"
+    ) of
+        {ok, _, [{TotalReqs, TotalCost, AvgLatency}]} ->
+            reply_ok(#{data => #{
+                total_requests => binary_to_integer(TotalReqs),
+                total_cost => TotalCost,
+                avg_latency_ms => AvgLatency
+            }}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% GET /api/v1/admin/usage
+handle(<<"GET">>, [<<"usage">>], Req0, State, _Claims) ->
+    QS = cowboy_req:parse_qs(Req0),
+    Page = qs_int(<<"page">>, QS, 1),
+    Limit = qs_int(<<"limit">>, QS, 50),
+    Offset = (Page - 1) * Limit,
+    UserFilter = proplists:get_value(<<"user_id">>, QS, undefined),
+    ModelFilter = proplists:get_value(<<"model">>, QS, undefined),
+    {WhereClause, Params} = build_usage_filters(UserFilter, ModelFilter),
+    CountSQL = iolist_to_binary([
+        "SELECT COUNT(*) FROM usage_logs", WhereClause]),
+    DataSQL = iolist_to_binary([
+        "SELECT id, user_id, request_id, requested_model, input_tokens, output_tokens, "
+        "actual_cost, stream, duration_ms, created_at FROM usage_logs",
+        WhereClause,
+        " ORDER BY created_at DESC LIMIT $", integer_to_binary(length(Params) + 1),
+        " OFFSET $", integer_to_binary(length(Params) + 2)]),
+    case ersub_repo:query(CountSQL, Params) of
+        {ok, _, [{Total}]} ->
+            case ersub_repo:query(DataSQL, Params ++ [Limit, Offset]) of
+                {ok, _, Rows} ->
+                    Logs = [#{id => LId, user_id => UID, request_id => RId,
+                              model => M, input_tokens => IT, output_tokens => OT,
+                              cost => C, stream => S, duration_ms => D,
+                              created_at => CA}
+                            || {LId, UID, RId, M, IT, OT, C, S, D, CA} <- Rows],
+                    reply_ok(#{data => Logs,
+                               meta => #{total => Total, page => Page, limit => Limit}},
+                             Req0, State);
+                {error, Reason} ->
+                    reply_err(500, Reason, Req0, State)
+            end;
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% === Subscriptions ===
+
+%% GET /api/v1/admin/subscriptions
+handle(<<"GET">>, [<<"subscriptions">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT id, user_id, group_id, status, starts_at, expires_at, "
+        "daily_usage_usd, weekly_usage_usd, monthly_usage_usd, created_at "
+        "FROM user_subscriptions ORDER BY id"
+    ) of
+        {ok, _, Rows} ->
+            Subs = [#{id => SId, user_id => UID, group_id => GID, status => St,
+                       starts_at => SA, expires_at => EA,
+                       daily_usage_usd => DU, weekly_usage_usd => WU,
+                       monthly_usage_usd => MU, created_at => CA}
+                    || {SId, UID, GID, St, SA, EA, DU, WU, MU, CA} <- Rows],
+            reply_ok(#{data => Subs}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% POST /api/v1/admin/subscriptions — uses CLIPS subscription.clp
+handle(<<"POST">>, [<<"subscriptions">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    UserId = maps:get(<<"user_id">>, Params),
+    GroupId = maps:get(<<"group_id">>, Params),
+    StartsAt = maps:get(<<"starts_at">>, Params, <<"now">>),
+    %% Look up group billing_type for CLIPS validation
+    case ersub_repo:query("SELECT billing_type FROM groups WHERE id = $1", [GroupId]) of
+        {ok, _, [{BillingType}]} ->
+            ClipsData = #{user_id => UserId, group_id => GroupId, billing_type => BillingType},
+            case ersub_clips_pool:check_quota(ClipsData) of
+                {ok, _} ->
+                    case ersub_repo:query(
+                        "INSERT INTO user_subscriptions (user_id, group_id, starts_at) "
+                        "VALUES ($1, $2, $3) RETURNING id, status, created_at",
+                        [UserId, GroupId, StartsAt]
+                    ) of
+                        {ok, 1, _, [{SubId, Status, CreatedAt}]} ->
+                            reply_ok(#{data => #{id => SubId, user_id => UserId,
+                                                 group_id => GroupId, status => Status,
+                                                 starts_at => StartsAt,
+                                                 created_at => CreatedAt}}, Req1, State);
+                        {error, Reason} ->
+                            reply_err(500, Reason, Req1, State)
+                    end;
+                {error, Reason} ->
+                    reply_err(400, Reason, Req1, State)
+            end;
+        {ok, _, []} ->
+            reply_err(404, group_not_found, Req1, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req1, State)
+    end;
+
+%% DELETE /api/v1/admin/subscriptions/:id
+handle(<<"DELETE">>, [<<"subscriptions">>, IdBin], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "DELETE FROM user_subscriptions WHERE id = $1", [Id]
+    ) of
+        {ok, 1} -> reply_ok(#{success => true}, Req0, State);
+        {ok, 0} -> reply_err(404, not_found, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
+%% === System Diagnostics ===
+
+%% GET /api/v1/admin/system
+handle(<<"GET">>, [<<"system">>], Req0, State, _Claims) ->
+    Memory = erlang:memory(),
+    Children = supervisor:which_children(ersub_sup),
+    {PoolStatus, PoolWorkers, PoolOverflow, PoolMonitors} =
+        poolboy:status(ersub_clips_pool),
+    {WallClock, _} = erlang:statistics(wall_clock),
+    UptimeSecs = WallClock div 1000,
+    SystemInfo = #{
+        memory => #{
+            total => proplists:get_value(total, Memory),
+            processes => proplists:get_value(processes, Memory),
+            system => proplists:get_value(system, Memory),
+            atom => proplists:get_value(atom, Memory),
+            binary => proplists:get_value(binary, Memory),
+            ets => proplists:get_value(ets, Memory)
+        },
+        clips_pool => #{
+            status => PoolStatus,
+            available_workers => PoolWorkers,
+            overflow => PoolOverflow,
+            monitors => PoolMonitors
+        },
+        supervisor_children => length(Children),
+        uptime_seconds => UptimeSecs,
+        otp_release => list_to_binary(erlang:system_info(otp_release)),
+        node => atom_to_binary(node())
+    },
+    reply_ok(#{data => SystemInfo}, Req0, State);
+
+%% === Affiliates ===
+
+%% GET /api/v1/admin/affiliates
+handle(<<"GET">>, [<<"affiliates">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT id, user_id, aff_code, inviter_id, rebate_rate, aff_quota, "
+        "aff_history, is_frozen, created_at "
+        "FROM user_affiliates ORDER BY id"
+    ) of
+        {ok, _, Rows} ->
+            Affiliates = [#{id => AId, user_id => UID, aff_code => Code,
+                            inviter_id => Inv, rebate_rate => Rate,
+                            aff_quota => Quota, aff_history => History,
+                            is_frozen => Frozen, created_at => CA}
+                          || {AId, UID, Code, Inv, Rate, Quota, History, Frozen, CA} <- Rows],
+            reply_ok(#{data => Affiliates}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% POST /api/v1/admin/affiliates/:id/freeze
+handle(<<"POST">>, [<<"affiliates">>, IdBin, <<"freeze">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "UPDATE user_affiliates SET is_frozen = TRUE WHERE id = $1", [Id]
+    ) of
+        {ok, 1} -> reply_ok(#{success => true}, Req0, State);
+        {ok, 0} -> reply_err(404, not_found, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
+%% POST /api/v1/admin/affiliates/:id/unfreeze
+handle(<<"POST">>, [<<"affiliates">>, IdBin, <<"unfreeze">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "UPDATE user_affiliates SET is_frozen = FALSE WHERE id = $1", [Id]
+    ) of
+        {ok, 1} -> reply_ok(#{success => true}, Req0, State);
+        {ok, 0} -> reply_err(404, not_found, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
 handle(_, _, Req0, State, _) ->
     Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
     {ok, Req, State}.
@@ -276,6 +530,29 @@ auth_msg(missing_token) -> <<"Missing Authorization header">>;
 auth_msg(not_admin) -> <<"Admin role required">>;
 auth_msg(token_expired) -> <<"Token expired">>;
 auth_msg(_) -> <<"Authentication failed">>.
+
+qs_int(Key, QS, Default) ->
+    case proplists:get_value(Key, QS, undefined) of
+        undefined -> Default;
+        V -> try binary_to_integer(V) catch _:_ -> Default end
+    end.
+
+build_usage_filters(UserFilter, ModelFilter) ->
+    {Clauses, Params} = lists:foldl(fun
+        ({undefined, _}, Acc) -> Acc;
+        ({Value, Col}, {Cs, Ps}) ->
+            Idx = length(Ps) + 1,
+            Clause = iolist_to_binary([" AND ", Col, " = $", integer_to_binary(Idx)]),
+            {[Clause | Cs], Ps ++ [Value]}
+    end, {[], []}, [
+        {UserFilter, "user_id"},
+        {ModelFilter, "requested_model"}
+    ]),
+    WhereClause = case Clauses of
+        [] -> <<>>;
+        _ -> iolist_to_binary([" WHERE 1=1" | lists:reverse(Clauses)])
+    end,
+    {WhereClause, Params}.
 
 csv_field(null) -> <<>>;
 csv_field(undefined) -> <<>>;

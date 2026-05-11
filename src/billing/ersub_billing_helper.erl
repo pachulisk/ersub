@@ -1,12 +1,17 @@
 -module(ersub_billing_helper).
 
--export([record_non_streaming_usage/4]).
+-export([record_non_streaming_usage/4, record_non_streaming_usage/5]).
 
 %% Record usage and deduct billing for a non-streaming response.
 %% Uses CLIPS billing.clp rules for cost calculation.
 -spec record_non_streaming_usage(map(), integer(), binary(), binary()) -> ok.
 
 record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel) ->
+    record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel, #{}).
+
+%% Extended version with additional billing metadata.
+-spec record_non_streaming_usage(map(), integer(), binary(), binary(), map()) -> ok.
+record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel, Opts) ->
     #{user_id := UserId, key_id := KeyId} = AuthCtx,
     Usage = extract_usage(ResponseBody),
     InputTokens = maps:get(input_tokens, Usage, 0),
@@ -39,7 +44,9 @@ record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel) ->
                 total_cost => ActualCost,
                 actual_cost => ActualCost,
                 stream => false,
-                request_type => 1
+                request_type => 1,
+                model_mapping_chain => maps:get(model_mapping_chain, Opts, null),
+                billing_model_source => maps:get(billing_model_source, Opts, null)
             })
     end,
     ok.

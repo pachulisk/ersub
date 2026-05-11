@@ -87,11 +87,12 @@ insert_single_record(R) ->
           "input_cost, output_cost, cache_read_cost, cache_creation_cost, "
           "total_cost, actual_cost, rate_multiplier, "
           "service_tier, billing_mode, request_type, stream, "
-          "duration_ms, first_token_ms, user_agent, ip_address"
+          "duration_ms, first_token_ms, user_agent, ip_address, "
+          "model_mapping_chain, billing_model_source"
           ") VALUES ("
           "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, "
           "$12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, "
-          "$23, $24, $25, $26::inet"
+          "$23, $24, $25, $26::inet, $27, $28"
           ")",
     Params = [
         maps:get(user_id, R),
@@ -119,7 +120,9 @@ insert_single_record(R) ->
         maps:get(duration_ms, R, null),
         maps:get(first_token_ms, R, null),
         maps:get(user_agent, R, null),
-        maps:get(ip_address, R, null)
+        maps:get(ip_address, R, null),
+        maps:get(model_mapping_chain, R, null),
+        maps:get(billing_model_source, R, null)
     ],
     case ersub_repo:query(SQL, Params) of
         {ok, 1} -> ok;

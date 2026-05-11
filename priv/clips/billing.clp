@@ -97,3 +97,38 @@
         (cache-read-cost 0.0) (cache-creation-cost 0.0)
         (image-cost ?actual) (total-cost ?base) (actual-cost ?actual)))
 )
+
+;; === Tiered Pricing Support ===
+
+(deftemplate pricing-tier
+    (slot model (type STRING))
+    (slot tier-start (type INTEGER))    ;; tokens threshold start
+    (slot tier-end (type INTEGER))      ;; tokens threshold end (0 = unlimited)
+    (slot input-price (type FLOAT))
+    (slot output-price (type FLOAT))
+)
+
+(deftemplate tiered-billing-result
+    (slot total-cost (type FLOAT))
+    (slot actual-cost (type FLOAT))
+)
+
+(defrule calculate-tiered-cost
+    "Tiered pricing: apply different rates per usage tier"
+    (billing-mode (mode tiered))
+    (usage (model ?m) (input-tokens ?it) (output-tokens ?ot)
+           (account-rate-mult ?arm) (group-rate-mult ?grm))
+    (pricing-tier (model ?m) (tier-start ?ts) (tier-end ?te)
+                  (input-price ?ip) (output-price ?op))
+    (test (> ?it ?ts))
+    =>
+    (bind ?effective-input (if (and (> ?te 0) (> ?it ?te))
+                            then (- ?te ?ts)
+                            else (- ?it ?ts)))
+    (bind ?effective-output (if (and (> ?te 0) (> ?ot ?te))
+                             then (- ?te ?ts)
+                             else (max 0 (- ?ot ?ts))))
+    (bind ?tier-cost (+ (* ?effective-input ?ip) (* ?effective-output ?op)))
+    (bind ?actual (* ?tier-cost ?arm ?grm))
+    (assert (tiered-billing-result (total-cost ?tier-cost) (actual-cost ?actual)))
+)

@@ -309,6 +309,20 @@ handle_call({evaluate_identity, Data}, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
+%% === 13. CHANNEL FILTER (channel_filter.clp) ===
+handle_call({filter_channels, Candidates}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = build_channel_filter_facts(Candidates),
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"channel-filter-result">>],
+            {reply, {ok, Results}, S3};
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),
@@ -568,6 +582,19 @@ build_dispatch_facts(D) ->
         [Fact | Acc]
     end, [], ModelConfig),
     [RequestFact | ConfigFacts].
+
+build_channel_filter_facts(Candidates) ->
+    lists:map(fun(C) ->
+        Id = maps:get(id, C, 0),
+        GID = maps:get(group_id, C, 0),
+        Platform = maps:get(platform, C, unknown),
+        IsActive = maps:get(is_active, C, false),
+        HasModel = maps:get(has_model, C, false),
+        iolist_to_binary(io_lib:format(
+            "(channel-candidate (id ~p) (group-id ~p) (platform ~s) "
+            "(is-active ~s) (has-model ~s))",
+            [Id, GID, Platform, bool_sym(IsActive), bool_sym(HasModel)]))
+    end, Candidates).
 
 bool_sym(true) -> "TRUE";
 bool_sym(false) -> "FALSE";

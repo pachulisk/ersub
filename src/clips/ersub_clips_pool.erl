@@ -9,6 +9,8 @@
 %% Extended decision APIs
 -export([evaluate_moderation/1, evaluate_refund_transition/1,
          evaluate_messages_dispatch/1]).
+%% Channel filter API
+-export([filter_channels/1]).
 
 -define(POOL, ersub_clips_pool).
 
@@ -98,4 +100,11 @@ evaluate_refund_transition(RefundData) ->
 evaluate_messages_dispatch(DispatchData) ->
     with_worker(fun(W) ->
         gen_server:call(W, {evaluate_dispatch, DispatchData}, 10000)
+    end).
+
+%% Filter channels by availability via channel_filter.clp rules.
+-spec filter_channels([map()]) -> {ok, [map()]} | {error, term()}.
+filter_channels(Candidates) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {filter_channels, Candidates}, 10000)
     end).

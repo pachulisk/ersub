@@ -22,6 +22,10 @@ handle(<<"POST">>, [<<"login">>], Req0, State) ->
                 _ ->
                     case ersub_auth_srv:verify_password(Password, Hash) of
                         true ->
+                            %% Update last_login_at on success
+                            ersub_repo:query(
+                                "UPDATE users SET last_login_at = NOW() WHERE id = $1",
+                                [UserId]),
                             {ok, Token} = ersub_auth_srv:generate_jwt(#{
                                 <<"user_id">> => UserId,
                                 <<"role">> => Role
@@ -45,6 +49,10 @@ handle(<<"POST">>, [<<"register">>], Req0, State) ->
     case ersub_repo:create_user(#{email => Email, password_hash => Hash}) of
         {ok, User} ->
             UserId = maps:get(id, User),
+            %% Record signup source as email
+            ersub_repo:query(
+                "UPDATE users SET signup_source = 'email' WHERE id = $1",
+                [UserId]),
             {ok, Token} = ersub_auth_srv:generate_jwt(#{
                 <<"user_id">> => UserId,
                 <<"role">> => <<"user">>
@@ -113,6 +121,36 @@ get_oauth_config(<<"github">>) ->
                 scope => <<"read:user user:email">>
             }}
     end;
+get_oauth_config(<<"linuxdo">>) ->
+    ClientId = ersub_config_srv:get(auth_oauth_providers_linuxdo_client_id, undefined),
+    case ClientId of
+        undefined -> {error, not_configured};
+        _ ->
+            {ok, #{
+                client_id => to_bin(ClientId),
+                client_secret => to_bin(ersub_config_srv:get(auth_oauth_providers_linuxdo_client_secret, <<>>)),
+                auth_url => <<"https://connect.linux.do/oauth2/authorize">>,
+                token_url => <<"https://connect.linux.do/oauth2/token">>,
+                user_url => <<"https://connect.linux.do/api/user">>,
+                redirect_uri => build_redirect_uri(<<"linuxdo">>),
+                scope => <<"read">>
+            }}
+    end;
+get_oauth_config(<<"wechat">>) ->
+    AppId = ersub_config_srv:get(auth_oauth_providers_wechat_app_id, undefined),
+    case AppId of
+        undefined -> {error, not_configured};
+        _ ->
+            {ok, #{
+                client_id => to_bin(AppId),
+                client_secret => to_bin(ersub_config_srv:get(auth_oauth_providers_wechat_app_secret, <<>>)),
+                auth_url => <<"https://open.weixin.qq.com/connect/qrconnect">>,
+                token_url => <<"https://api.weixin.qq.com/sns/oauth2/access_token">>,
+                user_url => <<"https://api.weixin.qq.com/sns/userinfo">>,
+                redirect_uri => build_redirect_uri(<<"wechat">>),
+                scope => <<"snsapi_login">>
+            }}
+    end;
 get_oauth_config(<<"google">>) ->
     ClientId = ersub_config_srv:get(auth_oauth_providers_google_client_id, undefined),
     case ClientId of
@@ -166,7 +204,7 @@ exchange_oauth_code(Provider, Code) ->
                 {ok, 200, _, RespBody} ->
                     TokenData = jsx:decode(RespBody, [return_maps]),
                     AccessToken = maps:get(<<"access_token">>, TokenData),
-                    fetch_oauth_user(Config, AccessToken);
+                    fetch_oauth_user(Provider, Config, AccessToken);
                 {ok, Status, _, RespBody} ->
                     {error, {token_exchange_failed, Status, RespBody}};
                 {error, Reason} ->
@@ -174,7 +212,7 @@ exchange_oauth_code(Provider, Code) ->
             end
     end.
 
-fetch_oauth_user(#{user_url := UserUrl}, AccessToken) ->
+fetch_oauth_user(Provider, #{user_url := UserUrl}, AccessToken) ->
     Headers = [{<<"authorization">>, <<"Bearer ", AccessToken/binary>>},
                {<<"accept">>, <<"application/json">>}],
     case ersub_upstream_pool:request(<<"GET">>, UserUrl, Headers, <<>>, #{}, 10000) of
@@ -182,11 +220,15 @@ fetch_oauth_user(#{user_url := UserUrl}, AccessToken) ->
             UserData = jsx:decode(Body, [return_maps]),
             ProviderId = integer_to_binary(maps:get(<<"id">>, UserData, 0)),
             Email = maps:get(<<"email">>, UserData, <<>>),
-            %% Find or create user
+            %% Find or create user using actual provider
             case ersub_repo:query(
-                "SELECT user_id FROM auth_identities WHERE provider = 'github' AND provider_id = $1",
-                [ProviderId]) of
+                "SELECT user_id FROM auth_identities WHERE provider = $1 AND provider_id = $2",
+                [Provider, ProviderId]) of
                 {ok, _, [{UserId}]} ->
+                    %% Update last_login_at on OAuth login
+                    ersub_repo:query(
+                        "UPDATE users SET last_login_at = NOW() WHERE id = $1",
+                        [UserId]),
                     case ersub_repo:get_user(UserId) of
                         {ok, #{role := Role}} -> {ok, #{user_id => UserId, role => Role}};
                         _ -> {error, user_not_found}
@@ -197,9 +239,13 @@ fetch_oauth_user(#{user_url := UserUrl}, AccessToken) ->
                     case ersub_repo:create_user(#{email => Email, password_hash => Hash}) of
                         {ok, User} ->
                             UserId = maps:get(id, User),
+                            %% Record signup_source as provider name
+                            ersub_repo:query(
+                                "UPDATE users SET signup_source = $1 WHERE id = $2",
+                                [Provider, UserId]),
                             ersub_repo:query(
                                 "INSERT INTO auth_identities (user_id, provider, provider_id) "
-                                "VALUES ($1, 'github', $2)", [UserId, ProviderId]),
+                                "VALUES ($1, $2, $3)", [UserId, Provider, ProviderId]),
                             {ok, #{user_id => UserId, role => <<"user">>}};
                         {error, R} -> {error, R}
                     end;
