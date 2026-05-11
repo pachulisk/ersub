@@ -9,26 +9,26 @@ T0-07,0,流式,failover.clp CLIPS 规则,定义 stream-error-event、failover-de
 T0-08,0,认证,OAuth Pending Session 表 + migration,pending_auth_sessions 表（session_token、intent、completion_code、browser_key、expires_at）+ identity_adoption_decisions 表,,priv/migrations/006_pending_auth.sql,P0,S,DONE
 T0-09,0,认证,OAuth Pending Session 逻辑,注册时生成 pending session → 验证码/邮件确认 → 采纳决策 → 激活用户,identity_adoption.clp,src/admin/ersub_auth_handler.erl src/auth/ersub_auth_srv.erl,P0,L,DONE
 T0-10,0,认证,identity_adoption.clp CLIPS 规则,身份冲突决策：新用户 adopt_all / 已有用户 merge / 冲突 reject,identity_adoption.clp,priv/clips/identity_adoption.clp src/clips/ersub_clips_worker.erl,P0,M,DONE
-T1-01,1,管理,使用量分析端点,GET /api/v1/admin/usage (搜索/统计/分页)，GET /api/v1/admin/usage/stats,,src/admin/ersub_admin_handler.erl,P1,M,TODO
-T1-02,1,管理,订阅管理 CRUD,GET/POST/PUT/DELETE /api/v1/admin/subscriptions,subscription.clp,src/admin/ersub_admin_handler.erl,P1,M,TODO
-T1-03,1,管理,订阅分配 CLIPS 规则,subscription.clp: 余额优先/配额优先分配策略,subscription.clp,priv/clips/subscription.clp,P1,M,TODO
-T1-04,1,管理,系统配置/诊断端点,GET /api/v1/admin/system (DB pool status、CLIPS pool status、memory usage),,src/admin/ersub_admin_handler.erl,P1,M,TODO
+T1-01,1,管理,使用量分析端点,GET /api/v1/admin/usage (搜索/统计/分页)，GET /api/v1/admin/usage/stats,,src/admin/ersub_admin_handler.erl,P1,M,DONE
+T1-02,1,管理,订阅管理 CRUD,GET/POST/PUT/DELETE /api/v1/admin/subscriptions,subscription.clp,src/admin/ersub_admin_handler.erl,P1,M,DONE
+T1-03,1,管理,订阅分配 CLIPS 规则,subscription.clp: 余额优先/配额优先分配策略,subscription.clp,priv/clips/subscription.clp,P1,M,DONE
+T1-04,1,管理,系统配置/诊断端点,GET /api/v1/admin/system (DB pool status、CLIPS pool status、memory usage),,src/admin/ersub_admin_handler.erl,P1,M,DONE
 T1-05,1,运维,Ops 仪表盘端点(6 个),GET /api/v1/admin/ops/dashboard (throughput/latency/errors/token_stats/model_breakdown/account_health),,src/admin/ersub_ops_handler.erl (新),P1,L,TODO
 T1-06,1,运维,Ops 告警 CRUD(7 个端点),ListAlertRules/Create/Update/Delete + ListEvents/UpdateEventStatus/CreateSilence,,src/admin/ersub_ops_handler.erl,P1,L,TODO
-T1-07,1,运维,Ops 设置端点,GET/PUT /api/v1/admin/ops/settings (数据保留策略、聚合策略),,src/admin/ersub_ops_handler.erl,P1,S,TODO
-T1-08,1,Channel,可用 Channel 列表端点,GET /api/v1/channels/available (按用户 group 过滤，含定价/模型信息),channel_filter.clp,src/admin/ersub_channel_handler.erl (新),P1,M,TODO
-T1-09,1,Channel,channel_filter.clp CLIPS 规则,可用 channel 筛选规则：模型匹配、价格范围、可用性状态,channel_filter.clp,priv/clips/channel_filter.clp,P1,M,TODO
-T1-10,1,Channel,Channel 监控用户端点,GET /api/v1/channels/:id/monitor (用户可见的 channel 健康状态),,src/admin/ersub_channel_handler.erl,P1,S,TODO
-T1-11,1,管理,分销管理 Handler,GET/POST /api/v1/admin/affiliates (列表/创建/冻结/解冻),,src/admin/ersub_admin_handler.erl,P1,M,TODO
-T1-12,1,计费,billing_model_source 记录,billing_helper 将 resolve_model_chain 结果（chain + source）传入 CLIPS facts 并记录到 usage_logs,,src/billing/ersub_billing_helper.erl src/gateway/ersub_request_transform.erl,P1,M,TODO
-T1-13,1,用户,用户注册来源追踪 migration,ALTER TABLE users ADD signup_source TEXT、last_login_at TIMESTAMPTZ、total_recharged NUMERIC,,priv/migrations/007_user_fields.sql,P1,S,TODO
-T1-14,1,用户,注册来源记录逻辑,auth_handler 注册时设置 signup_source，登录时更新 last_login_at,,src/admin/ersub_auth_handler.erl,P1,S,TODO
+T1-07,1,运维,Ops 设置端点,GET/PUT /api/v1/admin/ops/settings (数据保留策略、聚合策略),,src/admin/ersub_ops_handler.erl,P1,S,DONE
+T1-08,1,Channel,可用 Channel 列表端点,GET /api/v1/channels/available (按用户 group 过滤，含定价/模型信息),channel_filter.clp,src/admin/ersub_channel_handler.erl (新),P1,M,DONE
+T1-09,1,Channel,channel_filter.clp CLIPS 规则,可用 channel 筛选规则：模型匹配、价格范围、可用性状态,channel_filter.clp,priv/clips/channel_filter.clp,P1,M,DONE
+T1-10,1,Channel,Channel 监控用户端点,GET /api/v1/channels/:id/monitor (用户可见的 channel 健康状态),,src/admin/ersub_channel_handler.erl,P1,S,DONE
+T1-11,1,管理,分销管理 Handler,GET/POST /api/v1/admin/affiliates (列表/创建/冻结/解冻),,src/admin/ersub_admin_handler.erl,P1,M,DONE
+T1-12,1,计费,billing_model_source 记录,billing_helper 将 resolve_model_chain 结果（chain + source）传入 CLIPS facts 并记录到 usage_logs,,src/billing/ersub_billing_helper.erl src/gateway/ersub_request_transform.erl,P1,M,DONE
+T1-13,1,用户,用户注册来源追踪 migration,ALTER TABLE users ADD signup_source TEXT、last_login_at TIMESTAMPTZ、total_recharged NUMERIC,,priv/migrations/007_user_fields.sql,P1,S,DONE
+T1-14,1,用户,注册来源记录逻辑,auth_handler 注册时设置 signup_source，登录时更新 last_login_at,,src/admin/ersub_auth_handler.erl,P1,S,DONE
 T1-15,1,前端,补齐缺失 API 端点(~15 个),前端调用但 ersub 缺失的端点：订阅、系统、ops dashboard、channel available 等,,多个 handler,P1,L,TODO
-T2-01,2,用户,用户 display_name/avatar 字段,ALTER TABLE users ADD display_name TEXT、avatar_url TEXT + API 支持,,priv/migrations/ src/admin/ersub_user_handler.erl,P2,S,TODO
-T2-02,2,账户,SetupToken 5h 窗口预算,budget_window.clp + account_srv 中 5h 滑动窗口配额检查,budget_window.clp,priv/clips/budget_window.clp src/scheduler/ersub_account_srv.erl,P2,L,TODO
-T2-03,2,运维,详细运维分析表 migration,ops_request_details、ops_account_availability、ops_window_stats、ops_trends 表,,priv/migrations/008_ops_analytics.sql,P2,M,TODO
-T2-04,2,认证,LinuxDo OAuth Provider,auth_handler 增加 LinuxDo OAuth 配置和回调处理,,src/admin/ersub_auth_handler.erl,P2,M,TODO
-T2-05,2,认证,WeChat OAuth Provider,auth_handler 增加 WeChat OAuth 配置（需微信开放平台凭证）,,src/admin/ersub_auth_handler.erl,P2,M,TODO
-T2-06,2,计费,分级定价 Tiered Pricing,Channel 支持用量阶梯定价（不同阶梯不同单价），CLIPS billing.clp 扩展,,priv/clips/billing.clp src/channel/ersub_channel_srv.erl,P2,L,TODO
-T2-07,2,账户,账户 extra JSONB 字段,ALTER TABLE accounts ADD extra JSONB + repo 支持,,priv/migrations/ src/db/ersub_repo.erl,P2,S,TODO
+T2-01,2,用户,用户 display_name/avatar 字段,ALTER TABLE users ADD display_name TEXT、avatar_url TEXT + API 支持,,priv/migrations/ src/admin/ersub_user_handler.erl,P2,S,DONE
+T2-02,2,账户,SetupToken 5h 窗口预算,budget_window.clp + account_srv 中 5h 滑动窗口配额检查,budget_window.clp,priv/clips/budget_window.clp src/scheduler/ersub_account_srv.erl,P2,L,DONE
+T2-03,2,运维,详细运维分析表 migration,ops_request_details、ops_account_availability、ops_window_stats、ops_trends 表,,priv/migrations/008_ops_analytics.sql,P2,M,DONE
+T2-04,2,认证,LinuxDo OAuth Provider,auth_handler 增加 LinuxDo OAuth 配置和回调处理,,src/admin/ersub_auth_handler.erl,P2,M,DONE
+T2-05,2,认证,WeChat OAuth Provider,auth_handler 增加 WeChat OAuth 配置（需微信开放平台凭证）,,src/admin/ersub_auth_handler.erl,P2,M,DONE
+T2-06,2,计费,分级定价 Tiered Pricing,Channel 支持用量阶梯定价（不同阶梯不同单价），CLIPS billing.clp 扩展,,priv/clips/billing.clp src/channel/ersub_channel_srv.erl,P2,L,DONE
+T2-07,2,账户,账户 extra JSONB 字段,ALTER TABLE accounts ADD extra JSONB + repo 支持,,priv/migrations/ src/db/ersub_repo.erl,P2,S,DONE
 T2-08,2,管理,数据管理端点(S3 备份),GET/POST /api/v1/admin/data-management (S3 profile CRUD、备份任务),,src/admin/ersub_admin_handler.erl,P2,L,TODO
