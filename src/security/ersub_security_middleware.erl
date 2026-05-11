@@ -1,7 +1,7 @@
 -module(ersub_security_middleware).
 
 -export([apply_security_headers/1, apply_cors_headers/2, handle_preflight/1,
-         check_backend_mode/1]).
+         check_backend_mode/1, check_content_length/2]).
 
 %% Apply security headers to a response.
 -spec apply_security_headers(cowboy_req:req()) -> cowboy_req:req().
@@ -45,9 +45,13 @@ handle_preflight(Req0) ->
     cowboy_req:reply(204, #{}, <<>>, Req).
 
 %% Check if backend is in read-only mode.
-%% Blocks non-GET/HEAD/OPTIONS requests when enabled.
--spec check_backend_mode(binary()) -> ok | {error, read_only}.
+%% Accepts either a binary method or {Method, IsAdmin} tuple.
+%% Admin users always bypass read-only mode.
+%% Whitelisted paths (/health, /api/v1/auth/*) are always allowed.
+-spec check_backend_mode(binary() | {binary(), boolean()}) -> ok | {error, read_only}.
 
+check_backend_mode({_Method, true}) -> ok;
+check_backend_mode({Method, false}) -> check_backend_mode(Method);
 check_backend_mode(<<"GET">>) -> ok;
 check_backend_mode(<<"HEAD">>) -> ok;
 check_backend_mode(<<"OPTIONS">>) -> ok;
@@ -55,6 +59,23 @@ check_backend_mode(_Method) ->
     case ersub_config_srv:get(backend_mode, <<"standard">>) of
         <<"read_only">> -> {error, read_only};
         _ -> ok
+    end.
+
+%% Check Content-Length header against maximum allowed size.
+%% MaxBytes is the maximum allowed content length in bytes.
+-spec check_content_length(cowboy_req:req(), non_neg_integer()) ->
+    ok | {error, payload_too_large}.
+
+check_content_length(Req, MaxBytes) ->
+    case cowboy_req:header(<<"content-length">>, Req) of
+        undefined -> ok;
+        LenBin ->
+            try binary_to_integer(LenBin) of
+                Len when Len =< MaxBytes -> ok;
+                _ -> {error, payload_too_large}
+            catch
+                _:_ -> ok
+            end
     end.
 
 %%% Internal

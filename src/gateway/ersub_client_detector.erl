@@ -1,6 +1,7 @@
 -module(ersub_client_detector).
 
--export([detect_client/2, enforce_client_restriction/2]).
+-export([detect_client/2, enforce_client_restriction/2,
+         is_codex_cli/1, detect_warmup/1]).
 
 %% Detect client type from request headers and body.
 %% Returns {claude_code, Version} | {official, Type} | unknown.
@@ -76,3 +77,28 @@ check_official_client(Headers) ->
                 _ -> unknown
             end
     end.
+
+%% F15: Enhanced CodexCLI detection with ForceCodexCLI and codex_cli_rs UA
+-spec is_codex_cli(map()) -> boolean().
+is_codex_cli(Headers) ->
+    UA = maps:get(<<"user-agent">>, Headers, <<>>),
+    case re:run(UA, <<"(?i)(claude-cli|codex_cli_rs)/[0-9]">>) of
+        {match, _} -> true;
+        nomatch -> false
+    end.
+
+%% F20: Detect warmup/ping requests
+-spec detect_warmup(binary()) -> boolean().
+detect_warmup(Body) when is_binary(Body) ->
+    try
+        Json = jsx:decode(Body, [return_maps]),
+        Messages = maps:get(<<"messages">>, Json, []),
+        case Messages of
+            [#{<<"content">> := Content} | _] when is_binary(Content) ->
+                binary:match(Content, <<"Warmup">>) =/= nomatch orelse
+                binary:match(Content, <<"warmup">>) =/= nomatch;
+            _ -> false
+        end
+    catch _:_ -> false
+    end;
+detect_warmup(_) -> false.

@@ -11,6 +11,7 @@ routes() ->
             {"/v1/messages", ersub_claude_handler, []},
             {"/openai/v1/chat/completions", ersub_openai_handler, []},
             {"/openai/v1/responses", ersub_openai_responses_handler, []},
+            {"/openai/v1/responses/compact", ersub_openai_responses_handler, []},
             {"/openai/v1/realtime", ersub_openai_ws_handler, []},
             {"/openai/v1/images/generations", ersub_openai_images_handler, []},
             {"/openai/v1/images/edits", ersub_openai_images_handler, []},
