@@ -41,18 +41,45 @@ create_checkout_session(UserId, AmountUsd, SuccessUrl) ->
             end
     end.
 
-%% Verify Stripe webhook signature.
+%% Verify Stripe webhook signature (Stripe-Signature header format).
+%% Header: t=timestamp,v1=signature[,v1=signature...]
+%% Verifies HMAC-SHA256 and checks timestamp within 5-minute tolerance.
 -spec verify_webhook(binary(), binary()) -> boolean().
-verify_webhook(Payload, Signature) ->
+verify_webhook(Payload, SignatureHeader) ->
     WebhookSecret = ersub_config_srv:get(payment_stripe_webhook_secret, <<>>),
     case WebhookSecret of
         <<>> -> false;
         Secret ->
-            %% Simple HMAC check (production should parse Stripe-Signature header fully)
-            Expected = crypto:mac(hmac, sha256, Secret, Payload),
-            ExpHex = binary:encode_hex(Expected),
-            case binary:match(Signature, ExpHex) of
-                nomatch -> false;
-                _ -> true
+            case parse_stripe_signature(SignatureHeader) of
+                {ok, Timestamp, Signatures} ->
+                    %% Check timestamp within 5 minutes (anti-replay)
+                    Now = erlang:system_time(second),
+                    case abs(Now - Timestamp) =< 300 of
+                        false -> false;
+                        true ->
+                            %% Compute expected signature: HMAC-SHA256(secret, "timestamp.payload")
+                            SignedPayload = <<(integer_to_binary(Timestamp))/binary, ".", Payload/binary>>,
+                            Expected = string:lowercase(binary:encode_hex(
+                                crypto:mac(hmac, sha256, Secret, SignedPayload))),
+                            lists:any(fun(Sig) ->
+                                crypto:hash_equals(Expected, string:lowercase(Sig))
+                            end, Signatures)
+                    end;
+                error ->
+                    false
             end
+    end.
+
+parse_stripe_signature(Header) ->
+    Parts = binary:split(Header, <<",">>, [global]),
+    {Timestamps, Sigs} = lists:foldl(fun(Part, {Ts, Ss}) ->
+        case binary:split(Part, <<"=">>) of
+            [<<"t">>, V] -> {[binary_to_integer(V) | Ts], Ss};
+            [<<"v1">>, V] -> {Ts, [V | Ss]};
+            _ -> {Ts, Ss}
+        end
+    end, {[], []}, Parts),
+    case {Timestamps, Sigs} of
+        {[T | _], [_ | _]} -> {ok, T, Sigs};
+        _ -> error
     end.

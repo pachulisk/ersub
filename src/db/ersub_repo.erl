@@ -21,6 +21,12 @@
 -export([add_user_to_group/2, remove_user_from_group/2,
          list_user_groups/1]).
 
+%% Subscription operations
+-export([create_subscription/1, get_subscription/2, update_subscription_usage/3]).
+
+%% Channel operations
+-export([create_channel/1, list_channels_by_group/1, delete_channel/1]).
+
 %% Settings
 -export([get_setting/1, upsert_setting/2]).
 
@@ -313,6 +319,57 @@ upsert_setting(Key, Value) ->
         "INSERT INTO settings (key, value) VALUES ($1, $2) "
         "ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()",
         [Key, JsonValue]).
+
+%%% Subscription operations
+
+create_subscription(Attrs) ->
+    #{user_id := UserId, group_id := GroupId, starts_at := StartsAt} = Attrs,
+    ExpiresAt = maps:get(expires_at, Attrs, null),
+    query(
+        "INSERT INTO user_subscriptions (user_id, group_id, starts_at, expires_at) "
+        "VALUES ($1, $2, $3, $4) RETURNING id, created_at",
+        [UserId, GroupId, StartsAt, ExpiresAt]).
+
+get_subscription(UserId, GroupId) ->
+    case query(
+        "SELECT id, user_id, group_id, status, daily_usage_usd, weekly_usage_usd, "
+        "monthly_usage_usd, starts_at, expires_at FROM user_subscriptions "
+        "WHERE user_id = $1 AND group_id = $2 AND status = 'active'",
+        [UserId, GroupId]) of
+        {ok, _, [Row]} -> {ok, Row};
+        {ok, _, []} -> {error, not_found};
+        {error, R} -> {error, R}
+    end.
+
+update_subscription_usage(SubId, Field, Amount) ->
+    SQL = "UPDATE user_subscriptions SET " ++ atom_to_list(Field) ++
+          " = " ++ atom_to_list(Field) ++ " + $2 WHERE id = $1",
+    query(SQL, [SubId, Amount]).
+
+%%% Channel operations
+
+create_channel(Attrs) ->
+    #{name := Name, group_id := GroupId, platform := Platform,
+      base_url := BaseUrl} = Attrs,
+    ModelMapping = maps:get(model_mapping, Attrs, null),
+    MappingJson = case ModelMapping of null -> null; M -> jsx:encode(M) end,
+    query(
+        "INSERT INTO channels (name, group_id, platform, base_url, model_mapping) "
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at",
+        [Name, GroupId, Platform, BaseUrl, MappingJson]).
+
+list_channels_by_group(GroupId) ->
+    case query(
+        "SELECT id, name, platform, base_url, is_active "
+        "FROM channels WHERE group_id = $1 ORDER BY id", [GroupId]) of
+        {ok, _, Rows} ->
+            {ok, [#{id => Id, name => N, platform => P, base_url => B, is_active => A}
+                  || {Id, N, P, B, A} <- Rows]};
+        {error, R} -> {error, R}
+    end.
+
+delete_channel(Id) ->
+    query("DELETE FROM channels WHERE id = $1", [Id]).
 
 %%% Internal helpers
 
