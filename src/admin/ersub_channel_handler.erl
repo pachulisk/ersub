@@ -14,12 +14,11 @@ init(Req0, State) ->
             {ok, Req, State};
         {ok, Claims} ->
             UserId = maps:get(<<"user_id">>, Claims),
-            Path = cowboy_req:path_info(Req0),
-            handle(Method, Path, Req0, State, UserId)
+            handle(Method, Req0, State, UserId)
     end.
 
-%% GET /api/v1/channels/available
-handle(<<"GET">>, [<<"available">>], Req0, State, UserId) ->
+%% GET /api/v1/channels/available (exact route, no path_info)
+handle(<<"GET">>, Req0, State, UserId) ->
     %% Get user's groups
     case ersub_repo:query(
         "SELECT group_id FROM user_allowed_groups WHERE user_id = $1",
@@ -49,8 +48,8 @@ handle(<<"GET">>, [<<"available">>], Req0, State, UserId) ->
             {ok, Req, State}
     end;
 
-handle(_, _, Req0, State, _) ->
-    Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
+handle(_, Req0, State, _) ->
+    Req = reply_json(405, #{error => #{message => <<"Method not allowed">>}}, Req0),
     {ok, Req, State}.
 
 %%% Internal

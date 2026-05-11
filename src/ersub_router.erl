@@ -27,6 +27,7 @@ routes() ->
             {"/api/v1/announcements/[...]", ersub_announcement_handler, []},
             {"/api/v1/channels/available", ersub_channel_handler, []},
             {"/api/v1/channels/[...]", ersub_admin_handler, []},
+            {"/api/v1/admin/ops/[...]", ersub_ops_handler, []},
 
             %% Legacy routes (backward compat, redirect to /api/v1)
             {"/api/user/[...]", ersub_user_handler, []},

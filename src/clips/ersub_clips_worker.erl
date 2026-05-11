@@ -309,7 +309,24 @@ handle_call({evaluate_identity, Data}, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
-%% === 13. CHANNEL FILTER (channel_filter.clp) ===
+%% === 13. SUBSCRIPTION VALIDATION (subscription.clp) ===
+handle_call({evaluate_subscription, Data}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = build_subscription_facts(Data),
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"subscription-result">>],
+            case Results of
+                [R | _] -> {reply, {ok, R}, S3};
+                [] -> {reply, {ok, #{<<"allowed">> => false, <<"reason">> => <<"no_rule_matched">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
+%% === 14. CHANNEL FILTER (channel_filter.clp) ===
 handle_call({filter_channels, Candidates}, _From, #{port := Port} = State) ->
     {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
     Facts = build_channel_filter_facts(Candidates),
@@ -582,6 +599,14 @@ build_dispatch_facts(D) ->
         [Fact | Acc]
     end, [], ModelConfig),
     [RequestFact | ConfigFacts].
+
+build_subscription_facts(Data) ->
+    UID = maps:get(user_id, Data, 0),
+    GID = maps:get(group_id, Data, 0),
+    BT = maps:get(billing_type, Data, 0),
+    [iolist_to_binary(io_lib:format(
+        "(subscription-request (user-id ~p) (group-id ~p) (billing-type ~p))",
+        [UID, GID, BT]))].
 
 build_channel_filter_facts(Candidates) ->
     lists:map(fun(C) ->

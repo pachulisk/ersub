@@ -323,7 +323,10 @@ handle(<<"GET">>, [<<"usage">>], Req0, State, _Claims) ->
     Page = qs_int(<<"page">>, QS, 1),
     Limit = qs_int(<<"limit">>, QS, 50),
     Offset = (Page - 1) * Limit,
-    UserFilter = proplists:get_value(<<"user_id">>, QS, undefined),
+    UserFilter = case proplists:get_value(<<"user_id">>, QS, undefined) of
+        undefined -> undefined;
+        UBin -> try binary_to_integer(UBin) catch _:_ -> undefined end
+    end,
     ModelFilter = proplists:get_value(<<"model">>, QS, undefined),
     {WhereClause, Params} = build_usage_filters(UserFilter, ModelFilter),
     CountSQL = iolist_to_binary([
@@ -384,20 +387,28 @@ handle(<<"POST">>, [<<"subscriptions">>], Req0, State, _Claims) ->
     case ersub_repo:query("SELECT billing_type FROM groups WHERE id = $1", [GroupId]) of
         {ok, _, [{BillingType}]} ->
             ClipsData = #{user_id => UserId, group_id => GroupId, billing_type => BillingType},
-            case ersub_clips_pool:check_quota(ClipsData) of
-                {ok, _} ->
-                    case ersub_repo:query(
-                        "INSERT INTO user_subscriptions (user_id, group_id, starts_at) "
-                        "VALUES ($1, $2, $3) RETURNING id, status, created_at",
-                        [UserId, GroupId, StartsAt]
-                    ) of
-                        {ok, 1, _, [{SubId, Status, CreatedAt}]} ->
-                            reply_ok(#{data => #{id => SubId, user_id => UserId,
-                                                 group_id => GroupId, status => Status,
-                                                 starts_at => StartsAt,
-                                                 created_at => CreatedAt}}, Req1, State);
-                        {error, Reason} ->
-                            reply_err(500, Reason, Req1, State)
+            case ersub_clips_pool:evaluate_subscription(ClipsData) of
+                {ok, Result} ->
+                    Allowed = maps:get(<<"allowed">>, Result, false),
+                    IsAllowed = (Allowed =:= true orelse Allowed =:= <<"TRUE">>),
+                    case IsAllowed of
+                        true ->
+                            case ersub_repo:query(
+                                "INSERT INTO user_subscriptions (user_id, group_id, starts_at) "
+                                "VALUES ($1, $2, $3) RETURNING id, status, created_at",
+                                [UserId, GroupId, StartsAt]
+                            ) of
+                                {ok, 1, _, [{SubId, Status, CreatedAt}]} ->
+                                    reply_ok(#{data => #{id => SubId, user_id => UserId,
+                                                         group_id => GroupId, status => Status,
+                                                         starts_at => StartsAt,
+                                                         created_at => CreatedAt}}, Req1, State);
+                                {error, Reason} ->
+                                    reply_err(500, Reason, Req1, State)
+                            end;
+                        false ->
+                            DenyReason = maps:get(<<"reason">>, Result, <<"subscription_denied">>),
+                            reply_err(400, DenyReason, Req1, State)
                     end;
                 {error, Reason} ->
                     reply_err(400, Reason, Req1, State)

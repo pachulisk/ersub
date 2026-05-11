@@ -11,6 +11,8 @@
          evaluate_messages_dispatch/1]).
 %% Channel filter API
 -export([filter_channels/1]).
+%% Subscription validation API
+-export([evaluate_subscription/1]).
 
 -define(POOL, ersub_clips_pool).
 
@@ -107,4 +109,11 @@ evaluate_messages_dispatch(DispatchData) ->
 filter_channels(Candidates) ->
     with_worker(fun(W) ->
         gen_server:call(W, {filter_channels, Candidates}, 10000)
+    end).
+
+%% Evaluate subscription request via subscription.clp rules.
+-spec evaluate_subscription(map()) -> {ok, map()} | {error, term()}.
+evaluate_subscription(SubData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_subscription, SubData}, 10000)
     end).
