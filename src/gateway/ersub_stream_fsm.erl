@@ -94,14 +94,28 @@ connecting(info, {gun_response, ConnPid, StreamRef, nofin, Status, RespHeaders},
 
 connecting(info, {gun_response, ConnPid, StreamRef, nofin, Status, RespHeaders},
            #data{conn_pid = ConnPid, stream_ref = StreamRef, caller = Caller} = Data) ->
-    %% Non-2xx with body — collect error body then report
-    collect_error_body(ConnPid, StreamRef, Status, RespHeaders, Caller, Data);
+    %% Non-2xx: consult CLIPS failover rules
+    case evaluate_failover(Status, Data) of
+        switch_account ->
+            Caller ! {stream_failover, self(), {switch, Status, maps:from_list(RespHeaders)}},
+            cleanup(Data),
+            {stop, normal};
+        _ ->
+            collect_error_body(ConnPid, StreamRef, Status, RespHeaders, Caller, Data)
+    end;
 
 connecting(info, {gun_response, ConnPid, StreamRef, fin, Status, RespHeaders},
            #data{conn_pid = ConnPid, stream_ref = StreamRef, caller = Caller} = Data) ->
-    Caller ! {stream_error, self(), {upstream_error, Status, maps:from_list(RespHeaders), <<>>}},
-    cleanup(Data),
-    {stop, normal};
+    case evaluate_failover(Status, Data) of
+        switch_account ->
+            Caller ! {stream_failover, self(), {switch, Status, maps:from_list(RespHeaders)}},
+            cleanup(Data),
+            {stop, normal};
+        _ ->
+            Caller ! {stream_error, self(), {upstream_error, Status, maps:from_list(RespHeaders), <<>>}},
+            cleanup(Data),
+            {stop, normal}
+    end;
 
 connecting(info, {gun_error, ConnPid, _StreamRef, Reason},
            #data{conn_pid = ConnPid, caller = Caller} = Data) ->
@@ -265,4 +279,22 @@ collect_error_body(ConnPid, StreamRef, Status, RespHeaders, Caller, Data, Acc) -
         Caller ! {stream_error, self(), {upstream_error, Status, maps:from_list(RespHeaders), <<>>}},
         cleanup(Data),
         {stop, normal}
+    end.
+
+%% Consult CLIPS failover.clp for stream error decisions
+evaluate_failover(StatusCode, Data) ->
+    FailoverData = #{
+        account_id => Data#data.account_id,
+        error_code => StatusCode,
+        bytes_sent => 0,
+        stream_started => false,
+        attempt => 0,
+        max_switches => 10
+    },
+    case ersub_clips_pool:with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_failover, FailoverData}, 5000)
+    end) of
+        {ok, #{<<"action">> := <<"switch_account">>}} -> switch_account;
+        {ok, #{<<"action">> := <<"retry_same">>}} -> retry_same;
+        _ -> abort
     end.
