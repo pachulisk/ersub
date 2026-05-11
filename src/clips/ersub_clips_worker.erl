@@ -226,6 +226,89 @@ handle_call({evaluate_dispatch, DispatchData}, _From, #{port := Port} = State) -
             {reply, {error, Reason}, S2}
     end;
 
+%% === 10. POOL STRATEGY (pool_strategy.clp) ===
+handle_call({evaluate_pool_strategy, Data}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Mode = ersub_config_srv:get(upstream_pool_isolation, <<"account_proxy">>),
+    AID = maps:get(account_id, Data, 0),
+    PE = maps:get(proxy_endpoint, Data, <<>>),
+    Platform = maps:get(platform, Data, unknown),
+    Facts = [
+        iolist_to_binary(io_lib:format("(pool-config (mode ~s))", [Mode])),
+        iolist_to_binary(io_lib:format(
+            "(pool-request (account-id ~p) (proxy-endpoint \"~s\") (platform ~s))",
+            [AID, PE, Platform]))
+    ],
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"pool-strategy-result">>],
+            case Results of
+                [R | _] -> {reply, {ok, R}, S3};
+                [] -> {reply, {ok, #{<<"pool-key">> => <<"default">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
+%% === 11. FAILOVER DECISION (failover.clp) ===
+handle_call({evaluate_failover, Data}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    AID = maps:get(account_id, Data, 0),
+    EC = maps:get(error_code, Data, 500),
+    BS = maps:get(bytes_sent, Data, 0),
+    SS = maps:get(stream_started, Data, false),
+    Attempt = maps:get(attempt, Data, 0),
+    MaxSw = maps:get(max_switches, Data, 10),
+    PM = maps:get(pool_mode, Data, false),
+    PRC = maps:get(pool_retry_count, Data, 3),
+    PA = maps:get(pool_attempt, Data, 0),
+    Facts = [iolist_to_binary(io_lib:format(
+        "(stream-error-event (account-id ~p) (error-code ~p) (bytes-sent ~p) "
+        "(stream-started ~s) (attempt ~p) (max-switches ~p) "
+        "(pool-mode ~s) (pool-retry-count ~p) (pool-attempt ~p))",
+        [AID, EC, BS, bool_sym(SS), Attempt, MaxSw, bool_sym(PM), PRC, PA]))],
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Decisions = [F || F <- AllFacts,
+                         maps:get(<<"template">>, F, <<>>) =:= <<"failover-decision">>],
+            case Decisions of
+                [D | _] -> {reply, {ok, D}, S3};
+                [] -> {reply, {ok, #{<<"action">> => <<"reject">>, <<"reason">> => <<"no_rule">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
+%% === 12. IDENTITY ADOPTION (identity_adoption.clp) ===
+handle_call({evaluate_identity, Data}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Provider = maps:get(provider, Data, <<>>),
+    ExEmail = maps:get(existing_email, Data, <<"nil">>),
+    OEmail = maps:get(oauth_email, Data, <<>>),
+    HasDN = maps:get(has_display_name, Data, false),
+    HasAv = maps:get(has_avatar, Data, false),
+    HasPw = maps:get(existing_has_password, Data, false),
+    Facts = [iolist_to_binary(io_lib:format(
+        "(identity-conflict (provider \"~s\") (existing-email \"~s\") "
+        "(oauth-email \"~s\") (has-display-name ~s) (has-avatar ~s) "
+        "(existing-has-password ~s))",
+        [Provider, ExEmail, OEmail, bool_sym(HasDN), bool_sym(HasAv), bool_sym(HasPw)]))],
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Decisions = [F || F <- AllFacts,
+                         maps:get(<<"template">>, F, <<>>) =:= <<"adoption-decision">>],
+            case Decisions of
+                [D | _] -> {reply, {ok, D}, S3};
+                [] -> {reply, {ok, #{<<"action">> => <<"create_new">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),
@@ -485,3 +568,9 @@ build_dispatch_facts(D) ->
         [Fact | Acc]
     end, [], ModelConfig),
     [RequestFact | ConfigFacts].
+
+bool_sym(true) -> "TRUE";
+bool_sym(false) -> "FALSE";
+bool_sym(<<"true">>) -> "TRUE";
+bool_sym(<<"false">>) -> "FALSE";
+bool_sym(_) -> "FALSE".

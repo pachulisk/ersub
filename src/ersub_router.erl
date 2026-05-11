@@ -5,7 +5,7 @@
 routes() ->
     [
         {'_', [
-            %% Gateway endpoints
+            %% Gateway endpoints (no /api/v1 prefix — these are the proxy)
             {"/v1/models/[...]", ersub_models_handler, []},
             {"/v1/models", ersub_models_handler, []},
             {"/v1/messages", ersub_claude_handler, []},
@@ -17,16 +17,23 @@ routes() ->
             {"/gemini/v1beta/[...]", ersub_gemini_handler, []},
             {"/antigravity/v1/messages", ersub_antigravity_handler, []},
 
-            %% Management API (stubs until implemented)
+            %% Management API — /api/v1 prefix (sub2api frontend compatible)
+            {"/api/v1/user/[...]", ersub_user_handler, []},
+            {"/api/v1/keys/[...]", ersub_keys_handler, []},
+            {"/api/v1/usage/[...]", ersub_user_handler, []},
+            {"/api/v1/admin/[...]", ersub_admin_handler, []},
+            {"/api/v1/payment/[...]", ersub_payment_handler, []},
+            {"/api/v1/auth/[...]", ersub_auth_handler, []},
+            {"/api/v1/announcements/[...]", ersub_announcement_handler, []},
+            {"/api/v1/channels/[...]", ersub_admin_handler, []},
+
+            %% Legacy routes (backward compat, redirect to /api/v1)
             {"/api/user/[...]", ersub_user_handler, []},
-            {"/api/keys/[...]", ersub_keys_handler, []},
-            {"/api/usage/[...]", ersub_user_handler, []},  %% usage routed through user handler
             {"/api/admin/[...]", ersub_admin_handler, []},
-            {"/api/payment/[...]", ersub_payment_handler, []},
             {"/api/auth/[...]", ersub_auth_handler, []},
-            {"/api/announcements/[...]", ersub_announcement_handler, []},
 
             %% Ops WebSocket
+            {"/api/v1/admin/ops/ws/qps", ersub_ops_ws_handler, []},
             {"/api/ops/ws", ersub_ops_ws_handler, []},
 
             %% Custom Markdown pages
