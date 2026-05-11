@@ -46,7 +46,7 @@ start_account(AccountData) ->
 stop_account(Id) ->
     case supervisor:terminate_child(?SERVER, {account, Id}) of
         ok ->
-            supervisor:delete_child(?SERVER, {account, Id}),
+            _ = supervisor:delete_child(?SERVER, {account, Id}),
             ok;
         {error, not_found} ->
             ok;

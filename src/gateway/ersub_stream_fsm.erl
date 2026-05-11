@@ -7,7 +7,7 @@
 
 -record(data, {
     caller        :: pid(),
-    req           :: cowboy_req:req(),
+    req           :: cowboy_req:req() | undefined,
     conn_pid      :: pid() | undefined,
     conn_mref     :: reference() | undefined,
     stream_ref    :: reference() | undefined,
@@ -197,7 +197,7 @@ forward_and_accumulate([Event | Rest], Data) ->
     %% Try to extract token usage from the event
     Data3 = try_accumulate_tokens(Event, Data2),
     %% G05: Inject x-ersub-tokens SSE comment with accumulated counts
-    maybe_inject_token_comment(Data3),
+    _ = maybe_inject_token_comment(Data3),
     forward_and_accumulate(Rest, Data3).
 
 maybe_inject_token_comment(#data{caller = Caller, accumulated = Acc}) ->
@@ -208,7 +208,7 @@ maybe_inject_token_comment(#data{caller = Caller, accumulated = Acc}) ->
         cache_creation_tokens => maps:get(cache_creation_tokens, Acc, 0)
     }),
     Comment = <<": x-ersub-tokens ", TokenInfo/binary, "\n\n">>,
-    Caller ! {stream_chunk, self(), Comment}.
+    _ = Caller ! {stream_chunk, self(), Comment}.
 
 try_accumulate_tokens(Event, Data) ->
     %% Parse SSE data line for token usage

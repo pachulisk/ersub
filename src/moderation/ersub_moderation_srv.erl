@@ -39,7 +39,7 @@ check_content(UserId, Content) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?DEDUP_TABLE, [named_table, public, set]),
+    _ = ets:new(?DEDUP_TABLE, [named_table, public, set]),
     schedule_cleanup(),
     ApiKeys = load_api_keys(),
     logger:info("Moderation service started (keys=~p)", [length(ApiKeys)]),

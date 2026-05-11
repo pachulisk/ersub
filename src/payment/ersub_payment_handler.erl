@@ -57,7 +57,7 @@ handle(<<"POST">>, [<<"webhooks">>, Provider], Req0, State) ->
     case jsx:is_json(Body) of
         true ->
             Payload = jsx:decode(Body, [return_maps]),
-            handle_webhook(Provider, Payload),
+            _ = handle_webhook(Provider, Payload),
             {ok, reply_json(200, #{received => true}, Req1), State};
         false ->
             {ok, reply_json(400, #{error => #{message => <<"Invalid JSON">>}}, Req1), State}

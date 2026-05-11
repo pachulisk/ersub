@@ -51,7 +51,7 @@ handle_info(flush_timer, State) ->
     {noreply, NewState}.
 
 terminate(_Reason, State) ->
-    do_flush(State),
+    _ = do_flush(State),
     ok.
 
 %%% Internal

@@ -3,7 +3,7 @@
 -export([validate_upstream_url/1, validate_resolved_ip/1, is_private_ip/1]).
 
 %% Validate an upstream URL for safety (SSRF prevention).
--spec validate_upstream_url(binary()) -> ok | {error, atom()}.
+-spec validate_upstream_url(binary() | string()) -> ok | {error, atom()}.
 
 validate_upstream_url(Url) when is_binary(Url) ->
     validate_upstream_url(binary_to_list(Url));

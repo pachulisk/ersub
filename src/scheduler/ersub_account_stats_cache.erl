@@ -41,7 +41,7 @@ get_batch_stats(AccountIds) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
     schedule_cleanup(),
     {ok, #{}}.
 

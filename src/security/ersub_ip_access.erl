@@ -24,7 +24,7 @@ check_ip_access(ClientIP, Whitelist, Blacklist) ->
     end.
 
 %% Parse a CIDR string like "10.0.0.0/8" or plain IP "192.168.1.1"
--spec parse_cidr(binary()) -> {inet:ip_address(), non_neg_integer()} | {error, term()}.
+-spec parse_cidr(binary() | string()) -> {inet:ip_address(), non_neg_integer()} | {error, term()}.
 
 parse_cidr(CIDR) when is_binary(CIDR) ->
     parse_cidr(binary_to_list(CIDR));

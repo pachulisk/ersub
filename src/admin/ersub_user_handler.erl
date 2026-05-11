@@ -62,8 +62,10 @@ handle(<<"POST">>, [<<"change-password">>], Req0, State, UserId) ->
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
     #{<<"old_password">> := OldPass, <<"new_password">> := NewPass} =
         jsx:decode(Body, [return_maps]),
-    case ersub_repo:get_user_by_email_or_id(UserId) of
-        {ok, #{password_hash := StoredHash}} ->
+    case ersub_repo:query(
+        "SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL",
+        [UserId]) of
+        {ok, _, [{StoredHash}]} ->
             case ersub_auth_srv:verify_password(OldPass, StoredHash) of
                 true ->
                     NewHash = ersub_auth_srv:hash_password(NewPass),

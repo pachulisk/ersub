@@ -17,9 +17,9 @@ probe(#{host := Host, port := Port, protocol := Protocol}) ->
                     {error, Reason}
             end;
         <<"https">> ->
-            case ssl:connect(binary_to_list(Host), Port, [], 5000) of
+            case ssl:connect(binary_to_list(Host), Port, [{verify, verify_none}], 5000) of
                 {ok, Socket} ->
-                    ssl:close(Socket),
+                    _ = ssl:close(Socket),
                     Latency = erlang:monotonic_time(millisecond) - Start,
                     {ok, Latency};
                 {error, Reason} ->

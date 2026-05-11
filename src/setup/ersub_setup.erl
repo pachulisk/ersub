@@ -5,7 +5,7 @@
 -define(LOCK_FILE, ".installed").
 
 %% Check if setup has been run; if not, log instructions.
--spec check_and_run() -> ok | {error, term()}.
+-spec check_and_run() -> ok.
 check_and_run() ->
     case is_installed() of
         true ->
@@ -26,7 +26,7 @@ is_installed() ->
 
 run_setup() ->
     DataDir = data_dir(),
-    filelib:ensure_dir(filename:join(DataDir, "dummy")),
+    _ = filelib:ensure_dir(filename:join(DataDir, "dummy")),
     %% Run migrations
     logger:notice("Running database migrations..."),
     ok = ersub_migration:run(),

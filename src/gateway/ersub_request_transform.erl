@@ -8,7 +8,7 @@
 
 %% Transform a Claude API request body before forwarding upstream.
 %% Handles model passthrough, system prompt preservation, metadata stripping.
--spec transform_claude_request(map(), map()) -> {ok, binary()} | {error, term()}.
+-spec transform_claude_request(map(), map()) -> {ok, binary()}.
 
 transform_claude_request(Body, _Opts) ->
     %% For MVP: pass through with minimal transformation

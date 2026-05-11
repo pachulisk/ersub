@@ -118,23 +118,20 @@ reset_monthly_quotas() ->
     end.
 
 schedule_daily_reset() ->
-    Ms = ms_until_next_hour(0),
+    Ms = ms_until_next_hour(),
     erlang:send_after(Ms, self(), daily_reset).
 
 schedule_weekly_reset() ->
-    %% Reset on Monday at midnight — approximate with 7 days
-    erlang:send_after(ms_until_next_hour(0), self(), weekly_reset).
+    %% Reset on Monday at midnight -- approximate with 7 days
+    erlang:send_after(ms_until_next_hour(), self(), weekly_reset).
 
 schedule_monthly_reset() ->
-    %% Reset on 1st at midnight — approximate with 30 days
-    erlang:send_after(ms_until_next_hour(0), self(), monthly_reset).
+    %% Reset on 1st at midnight -- approximate with 30 days
+    erlang:send_after(ms_until_next_hour(), self(), monthly_reset).
 
-ms_until_next_hour(TargetHour) ->
+ms_until_next_hour() ->
     {_, {H, M, S}} = calendar:universal_time(),
-    SecsRemaining = case TargetHour of
-        0 -> (24 - H - 1) * 3600 + (60 - M - 1) * 60 + (60 - S);
-        _ -> max(1, (TargetHour - H) * 3600 - M * 60 - S)
-    end,
+    SecsRemaining = (24 - H - 1) * 3600 + (60 - M - 1) * 60 + (60 - S),
     max(60000, SecsRemaining * 1000).
 
 to_num(null) -> null;

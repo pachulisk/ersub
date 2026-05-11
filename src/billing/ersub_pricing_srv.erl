@@ -32,7 +32,7 @@ update_from_url() ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
     load_embedded_fallback(),
     schedule_update(),
     logger:info("Pricing service started with ~p models", [ets:info(?TABLE, size)]),
@@ -48,7 +48,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(update_timer, State) ->
-    do_update(),
+    _ = do_update(),
     schedule_update(),
     {noreply, State}.
 

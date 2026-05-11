@@ -75,7 +75,7 @@ handle(<<"POST">>, [<<"accounts">>], Req0, State, _Claims) ->
     case ersub_repo:create_account(Attrs) of
         {ok, Account} ->
             %% Start account process
-            case ersub_repo:get_account(maps:get(id, Account)) of
+            _ = case ersub_repo:get_account(maps:get(id, Account)) of
                 {ok, FullAcc} -> ersub_platform_sup:start_account(FullAcc);
                 _ -> ok
             end,
@@ -87,7 +87,7 @@ handle(<<"POST">>, [<<"accounts">>], Req0, State, _Claims) ->
 %% DELETE /api/admin/accounts/:id
 handle(<<"DELETE">>, [<<"accounts">>, IdBin], Req0, State, _Claims) ->
     Id = binary_to_integer(IdBin),
-    ersub_platform_sup:stop_account(Id),
+    _ = ersub_platform_sup:stop_account(Id),
     case ersub_repo:delete_account(Id) of
         {ok, _} -> reply_ok(#{success => true}, Req0, State);
         {error, Reason} -> reply_err(500, Reason, Req0, State)
@@ -175,7 +175,7 @@ handle(<<"GET">>, [<<"dashboard">>], Req0, State, _Claims) ->
 
 %% POST /api/admin/accounts/reload
 handle(<<"POST">>, [<<"accounts">>, <<"reload">>], Req0, State, _Claims) ->
-    ersub_platform_sup:load_all_accounts(),
+    _ = ersub_platform_sup:load_all_accounts(),
     reply_ok(#{success => true, running => length(ersub_platform_sup:list_accounts())},
              Req0, State);
 
@@ -567,12 +567,8 @@ handle(<<"GET">>, [<<"accounts">>, <<"today-stats">>], Req0, State, _Claims) ->
              || I <- binary:split(IdsBin, <<",">>, [global]),
                 I =/= <<>>]
     end,
-    case ersub_account_stats_cache:get_batch_stats(AccountIds) of
-        {ok, Stats} ->
-            reply_ok(#{data => Stats}, Req0, State);
-        {error, Reason} ->
-            reply_err(500, Reason, Req0, State)
-    end;
+    {ok, Stats} = ersub_account_stats_cache:get_batch_stats(AccountIds),
+    reply_ok(#{data => Stats}, Req0, State);
 
 %% === Batch Redeem/Promo (F14) ===
 

@@ -26,7 +26,7 @@ get_metrics() ->
 %% are defined as CLIPS facts and can be reordered/disabled at runtime.
 -spec select_account(map()) -> {ok, map()} | {error, no_available_account}.
 select_account(Req) ->
-    bump_counter(select_total),
+    _ = bump_counter(select_total),
     %% Get ordered selection layers from CLIPS
     Layers = case ersub_clips_pool:get_selection_layers() of
         {ok, L} when is_list(L), length(L) > 0 -> L;
@@ -46,7 +46,7 @@ execute_selection_layers([#{type := Type} | Rest], Req) ->
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
     case try_selection_layer(Type, UserId, ExcludedIds, Req) of
         {ok, Account} ->
-            bump_counter(sticky_hit),
+            _ = bump_counter(sticky_hit),
             {ok, Account};
         miss ->
             execute_selection_layers(Rest, Req)
@@ -90,7 +90,7 @@ select_with_failover(Req, ForwardFun) ->
 init([]) ->
     case ets:info(?METRICS_TABLE) of
         undefined ->
-            ets:new(?METRICS_TABLE, [named_table, public, set, {write_concurrency, true}]),
+            _ = ets:new(?METRICS_TABLE, [named_table, public, set, {write_concurrency, true}]),
             lists:foreach(fun(K) ->
                 ets:insert(?METRICS_TABLE, {K, 0})
             end, [select_total, sticky_hit, lb_select, account_switch]);
@@ -145,7 +145,7 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
                                     NewExcluded = Excluded#{{pool_attempt, AccountId} => PoolAttempt + 1},
                                     do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
                                 false ->
-                                    bump_counter(account_switch),
+                                    _ = bump_counter(account_switch),
                                     logger:warning("Account ~p returned ~p, switching (attempt ~p/~p)",
                                                    [AccountId, Code, Attempt + 1, MaxSwitches]),
                                     NewExcluded = Excluded#{AccountId => true},
@@ -163,7 +163,7 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
 
 %% Layer 2: Score-based selection via CLIPS scheduling.clp rules
 select_by_score(Req) ->
-    bump_counter(lb_select),
+    _ = bump_counter(lb_select),
     Platform = maps:get(platform, Req, undefined),
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
     case ersub_platform_sup:list_accounts() of
@@ -198,10 +198,8 @@ select_best_candidate_clips(Candidates, _Req) ->
             Sorted = lists:sort(fun(A, B) ->
                 maps:get(priority, A, 100) =< maps:get(priority, B, 100)
             end, Candidates),
-            case Sorted of
-                [Best | _] -> get_full_account(maps:get(id, Best));
-                [] -> {error, no_available_account}
-            end;
+            [Best | _] = Sorted,
+            get_full_account(maps:get(id, Best));
         _ ->
             select_via_clips(Candidates)
     end.

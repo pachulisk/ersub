@@ -29,7 +29,7 @@ deduct(UserId, Cost) when Cost > 0 ->
     %% Ensure user exists in cache
     _ = get_cached_balance(UserId),
     %% Atomic decrement in ETS
-    try
+    _ = try
         ets:update_counter(?BALANCE_TABLE, UserId, {2, -trunc(Cost * 1000000)})
     catch
         error:badarg ->
@@ -61,7 +61,7 @@ sync_balance(UserId) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?BALANCE_TABLE, [named_table, public, set, {write_concurrency, true}]),
+    _ = ets:new(?BALANCE_TABLE, [named_table, public, set, {write_concurrency, true}]),
     schedule_sync(),
     logger:info("Billing service started"),
     {ok, #{pending_syncs => #{}, circuit => closed, failures => 0}}.

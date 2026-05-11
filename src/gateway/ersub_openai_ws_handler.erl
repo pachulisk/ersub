@@ -8,7 +8,7 @@
 
 -record(state, {
     user_id     :: integer(),
-    account_id  :: integer(),
+    account_id  :: integer() | undefined,
     conn_pid    :: pid() | undefined,
     conn_mref   :: reference() | undefined,
     stream_ref  :: reference() | undefined,

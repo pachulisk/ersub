@@ -43,7 +43,7 @@ websocket_info(_Info, State) ->
     {ok, State}.
 
 terminate(_Reason, _Req, #state{timer_ref = TRef}) when TRef =/= undefined ->
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     ok;
 terminate(_Reason, _Req, _State) ->
     ok.

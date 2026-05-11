@@ -200,14 +200,10 @@ stream_loop(Req, State, FsmPid) ->
 %%% Internal
 
 read_body_json(Req0) ->
-    case cowboy_req:read_body(Req0, #{length => 268435456, period => 60000}) of
-        {ok, Body, Req1} ->
-            case jsx:is_json(Body) of
-                true -> {ok, jsx:decode(Body, [return_maps]), Body, Req1};
-                false -> {error, <<"Invalid JSON">>, Req1}
-            end;
-        {error, _} ->
-            {error, <<"Failed to read body">>, Req0}
+    {ok, Body, Req1} = cowboy_req:read_body(Req0, #{length => 268435456, period => 60000}),
+    case jsx:is_json(Body) of
+        true -> {ok, jsx:decode(Body, [return_maps]), Body, Req1};
+        false -> {error, <<"Invalid JSON">>, Req1}
     end.
 
 reply_json(Status, Body, Req) ->
@@ -254,5 +250,4 @@ auth_error_message(missing_key) -> <<"Missing API key">>;
 auth_error_message(invalid_key) -> <<"Invalid API key">>;
 auth_error_message(user_banned) -> <<"Account suspended">>;
 auth_error_message(key_inactive) -> <<"API key inactive">>;
-auth_error_message(key_expired) -> <<"API key expired">>;
-auth_error_message(_) -> <<"Authentication failed">>.
+auth_error_message(key_expired) -> <<"API key expired">>.

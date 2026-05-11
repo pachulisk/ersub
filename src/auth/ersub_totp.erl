@@ -47,7 +47,8 @@ verify_token(Token, Secret) when is_binary(Token), is_binary(Secret) ->
 generate_otp(Secret, Counter) ->
     CounterBin = <<Counter:64/big-unsigned-integer>>,
     Hmac = crypto:mac(hmac, sha, Secret, CounterBin),
-    <<_:152, Offset:4>> = Hmac,
+    <<_:19/binary, LastByte:8>> = Hmac,
+    Offset = LastByte band 16#0f,
     <<_:Offset/binary, _:1, Code:31/big-unsigned-integer, _/binary>> = Hmac,
     Code rem trunc(math:pow(10, ?DIGITS)).
 

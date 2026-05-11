@@ -59,7 +59,7 @@ cleanup_expired() ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?TABLE, [named_table, public, set, {read_concurrency, true}]),
     schedule_cleanup(),
     logger:info("Session sticky cache started"),
     {ok, #{}}.

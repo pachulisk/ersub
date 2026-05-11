@@ -4,8 +4,8 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    ersub_auth_middleware:init_cache(),
-    ersub_idempotency:init_cache(),
+    _ = ersub_auth_middleware:init_cache(),
+    _ = ersub_idempotency:init_cache(),
     ersub_scheduler_metrics:init(),
     ersub_image_limiter:init(),
     {ok, Pid} = ersub_sup:start_link(),
@@ -15,5 +15,5 @@ start(_StartType, _StartArgs) ->
     {ok, Pid}.
 
 stop(_State) ->
-    ersub_router:stop_listener(),
+    _ = ersub_router:stop_listener(),
     ok.

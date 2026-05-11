@@ -7,7 +7,7 @@
 init() ->
     case ets:info(?TABLE) of
         undefined ->
-            ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
+            _ = ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
             lists:foreach(fun(Key) ->
                 ets:insert(?TABLE, {Key, 0})
             end, [select_total, sticky_previous_hit, sticky_session_hit,
@@ -17,7 +17,7 @@ init() ->
 
 -spec increment(atom()) -> ok.
 increment(Key) ->
-    try ets:update_counter(?TABLE, Key, 1)
+    _ = try ets:update_counter(?TABLE, Key, 1)
     catch error:badarg -> ets:insert(?TABLE, {Key, 1})
     end,
     ok.
@@ -27,8 +27,8 @@ record_load_skew(LoadRates) when length(LoadRates) > 1 ->
     Mean = lists:sum(LoadRates) / length(LoadRates),
     Variance = lists:sum([(L - Mean) * (L - Mean) || L <- LoadRates]) / length(LoadRates),
     StdDev = math:sqrt(Variance),
-    try
-        ets:update_counter(?TABLE, load_skew_sum, trunc(StdDev * 10000)),
+    _ = try
+        _ = ets:update_counter(?TABLE, load_skew_sum, trunc(StdDev * 10000)),
         ets:update_counter(?TABLE, load_skew_count, 1)
     catch error:badarg -> ok
     end,

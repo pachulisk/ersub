@@ -53,7 +53,7 @@ reset(Type, Id) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
+    _ = ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
     schedule_cleanup(),
     logger:info("Rate limiter started"),
     {ok, #{}}.

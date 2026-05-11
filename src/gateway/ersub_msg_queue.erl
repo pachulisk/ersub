@@ -25,7 +25,7 @@ maybe_throttle(UserId, Account) ->
 
 serialize_lock(UserId) ->
     %% Init table if needed
-    case ets:info(?LOCK_TABLE) of
+    _ = case ets:info(?LOCK_TABLE) of
         undefined -> ets:new(?LOCK_TABLE, [named_table, public, set]);
         _ -> ok
     end,

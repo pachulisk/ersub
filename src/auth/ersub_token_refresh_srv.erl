@@ -17,7 +17,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% Trigger immediate refresh for an account (e.g., on 401).
--spec trigger_refresh(integer()) -> ok | {error, term()}.
+-spec trigger_refresh(integer()) -> ok.
 trigger_refresh(AccountId) ->
     gen_server:cast(?SERVER, {trigger_refresh, AccountId}).
 

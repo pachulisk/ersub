@@ -48,8 +48,8 @@ get_model_mapping(ChannelId) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?PRICING_TABLE, [named_table, public, set, {read_concurrency, true}]),
-    ets:new(?MAPPING_TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?PRICING_TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?MAPPING_TABLE, [named_table, public, set, {read_concurrency, true}]),
     refresh_cache(),
     schedule_refresh(),
     logger:info("Channel service started"),

@@ -12,12 +12,12 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% Check a user's balance against their notification threshold.
--spec check_and_notify(integer()) -> ok | not_configured | already_notified.
+-spec check_and_notify(integer()) -> ok.
 check_and_notify(UserId) ->
     gen_server:cast(?SERVER, {check, UserId}).
 
 init([]) ->
-    ets:new(?NOTIFIED_TABLE, [named_table, public, set]),
+    _ = ets:new(?NOTIFIED_TABLE, [named_table, public, set]),
     logger:info("Balance notify service started"),
     {ok, #{}}.
 

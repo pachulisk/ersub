@@ -104,8 +104,8 @@ pool_stats() ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?POOL_TABLE, [named_table, public, set, {read_concurrency, true}]),
-    ets:new(?LRU_TABLE, [named_table, public, ordered_set]),
+    _ = ets:new(?POOL_TABLE, [named_table, public, set, {read_concurrency, true}]),
+    _ = ets:new(?LRU_TABLE, [named_table, public, ordered_set]),
     schedule_cleanup(),
     logger:info("Upstream connection pool started (max=~p)", [?MAX_POOLS]),
     {ok, #{}}.

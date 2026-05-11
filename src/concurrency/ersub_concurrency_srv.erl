@@ -29,10 +29,10 @@ release(UserId, Ref) ->
 init([]) ->
     %% ETS table tracking active slots per user
     %% Key: {UserId, Ref}, Value: MonitorRef
-    ets:new(ersub_conc_slots, [named_table, public, set]),
+    _ = ets:new(ersub_conc_slots, [named_table, public, set]),
     %% ETS table counting active slots per user
     %% Key: UserId, Value: Count
-    ets:new(ersub_conc_counts, [named_table, public, set]),
+    _ = ets:new(ersub_conc_counts, [named_table, public, set]),
     logger:info("Concurrency control service started"),
     {ok, #{wait_queues => #{}}}.
 
@@ -46,7 +46,7 @@ handle_call({acquire, UserId, MaxConc}, From, #{wait_queues := WQ} = State) ->
             {CallerPid, _} = From,
             MRef = monitor(process, CallerPid),
             ets:insert(ersub_conc_slots, {{UserId, Ref}, MRef, CallerPid}),
-            increment_count(UserId),
+            _ = increment_count(UserId),
             {reply, {ok, Ref}, State};
         true ->
             %% Check wait queue size
@@ -72,7 +72,7 @@ handle_cast({release, UserId, Ref}, State) ->
         [{{_, _}, MRef, _Pid}] ->
             demonitor(MRef, [flush]),
             ets:delete(ersub_conc_slots, {UserId, Ref}),
-            decrement_count(UserId),
+            _ = decrement_count(UserId),
             NewState = try_dequeue(UserId, State),
             {noreply, NewState};
         [] ->
@@ -87,7 +87,7 @@ handle_info({'DOWN', MRef, process, Pid, _Reason}, State) ->
     case ets:match_object(ersub_conc_slots, {'_', MRef, Pid}) of
         [{{UserId, Ref}, _, _}] ->
             ets:delete(ersub_conc_slots, {UserId, Ref}),
-            decrement_count(UserId),
+            _ = decrement_count(UserId),
             NewState = try_dequeue(UserId, State),
             {noreply, NewState};
         [] ->
@@ -108,7 +108,7 @@ get_count(UserId) ->
 increment_count(UserId) ->
     case ets:lookup(ersub_conc_counts, UserId) of
         [{_, _}] ->
-            ets:update_counter(ersub_conc_counts, UserId, {2, 1});
+            _ = ets:update_counter(ersub_conc_counts, UserId, {2, 1});
         [] ->
             ets:insert(ersub_conc_counts, {UserId, 1}),
             1
@@ -117,7 +117,7 @@ increment_count(UserId) ->
 decrement_count(UserId) ->
     case ets:lookup(ersub_conc_counts, UserId) of
         [{_, Count}] when Count > 1 ->
-            ets:update_counter(ersub_conc_counts, UserId, {2, -1});
+            _ = ets:update_counter(ersub_conc_counts, UserId, {2, -1});
         [{_, _}] ->
             ets:delete(ersub_conc_counts, UserId);
         [] ->
@@ -137,7 +137,7 @@ try_dequeue(UserId, #{wait_queues := WQ} = State) ->
                             {CallerPid, _} = From,
                             MRef = monitor(process, CallerPid),
                             ets:insert(ersub_conc_slots, {{UserId, Ref}, MRef, CallerPid}),
-                            increment_count(UserId),
+                            _ = increment_count(UserId),
                             gen_server:reply(From, {ok, Ref}),
                             NewWQ = case queue:is_empty(NewQueue) of
                                 true -> maps:remove(UserId, WQ);

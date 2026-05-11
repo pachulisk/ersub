@@ -76,12 +76,6 @@ handle_authenticated(Req0, State, AuthCtx) ->
 do_request_pipeline(Req0, State, AuthCtx) ->
     #{user_id := UserId} = AuthCtx,
     case read_body(Req0) of
-        {error, Req1} ->
-            Req = reply_json(400, #{error => #{
-                type => <<"invalid_request_error">>,
-                message => <<"Failed to read request body">>
-            }}, Req1),
-            {ok, Req, State};
         {ok, Body, Req1} ->
             case jsx:is_json(Body) of
                 false ->
@@ -341,8 +335,7 @@ read_body(Req) ->
 read_body(Req0, Acc) ->
     case cowboy_req:read_body(Req0, #{length => 268435456, period => 60000}) of
         {ok, Data, Req} -> {ok, <<Acc/binary, Data/binary>>, Req};
-        {more, Data, Req} -> read_body(Req, <<Acc/binary, Data/binary>>);
-        {error, _} -> {error, Req0}
+        {more, Data, Req} -> read_body(Req, <<Acc/binary, Data/binary>>)
     end.
 
 reply_json(Status, Body, Req) ->
