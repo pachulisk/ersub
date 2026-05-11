@@ -47,7 +47,7 @@ do_pipeline(Req0, State, AuthCtx) ->
                                 {error, no_available_account} ->
                                     {ok, reply_json(503, #{error => #{message => <<"No accounts">>}}, Req1), State};
                                 {ok, Account} ->
-                                    forward(Req1, State, Account, Body)
+                                    forward(Req1, State, Account, Body, AuthCtx)
                             end
                     end
             end;
@@ -55,7 +55,7 @@ do_pipeline(Req0, State, AuthCtx) ->
             {ok, reply_json(400, #{error => #{message => <<"Read failed">>}}, Req0), State}
     end.
 
-forward(Req0, State, Account, Body) ->
+forward(Req0, State, Account, Body, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
     BaseUrl = case BaseUrl0 of
@@ -67,6 +67,12 @@ forward(Req0, State, Account, Body) ->
                {<<"authorization">>, <<"Bearer ", ApiKey/binary>>}],
     case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}, 120000) of
         {ok, Status, RespHeaders, RespBody} ->
+            case Status of
+                S when S >= 200, S < 300 ->
+                    ersub_billing_helper:record_non_streaming_usage(
+                        AuthCtx, maps:get(id, Account, 0), RespBody, <<"dall-e">>);
+                _ -> ok
+            end,
             Filtered = maps:filter(fun(K,_) ->
                 lists:member(string:lowercase(K), [<<"content-type">>])
             end, RespHeaders),

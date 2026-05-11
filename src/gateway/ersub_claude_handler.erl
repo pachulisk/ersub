@@ -121,13 +121,13 @@ do_request_pipeline(Req0, State, AuthCtx) ->
                                     }}, Req1),
                                     {ok, Req, State};
                                 {ok, Account} ->
-                                    do_forward(Req1, State, Account, Parsed, Body)
+                                    do_forward(Req1, State, Account, Parsed, Body, AuthCtx)
                             end
                     end
             end
     end.
 
-do_forward(Req0, State, Account, Parsed, OrigBody) ->
+do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
     BaseUrl = case BaseUrl0 of
@@ -154,6 +154,15 @@ do_forward(Req0, State, Account, Parsed, OrigBody) ->
         _ ->
             case http_request(Url, Headers, OrigBody) of
                 {ok, Status, RespHeaders, RespBody} ->
+                    %% Record usage and deduct billing for non-streaming
+                    Model = maps:get(<<"model">>, Parsed, <<>>),
+                    AccountId = maps:get(id, Account, 0),
+                    case Status of
+                        S when S >= 200, S < 300 ->
+                            ersub_billing_helper:record_non_streaming_usage(
+                                AuthCtx, AccountId, RespBody, Model);
+                        _ -> ok
+                    end,
                     FilteredHeaders = filter_response_headers(RespHeaders),
                     Req = cowboy_req:reply(Status, FilteredHeaders, RespBody, Req0),
                     {ok, Req, State};

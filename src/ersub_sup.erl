@@ -109,6 +109,41 @@ init([]) ->
         #{id => ersub_token_refresh_srv,
           start => {ersub_token_refresh_srv, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_affiliate_srv,
+          start => {ersub_affiliate_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_balance_notify_srv,
+          start => {ersub_balance_notify_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_health_srv,
+          start => {ersub_health_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_metrics_srv,
+          start => {ersub_metrics_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_usage_cleanup_srv,
+          start => {ersub_usage_cleanup_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_scheduled_test_srv,
+          start => {ersub_scheduled_test_srv, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_channel_monitor,
+          start => {ersub_channel_monitor, start_link, []},
+          restart => permanent,
           type => worker}
         %% NOTE: Cowboy listener started in ersub_app:start/2
     ],

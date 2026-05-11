@@ -3,7 +3,7 @@
 
 password_hash_test() ->
     Hash = ersub_auth_srv:hash_password(<<"testpassword">>),
-    ?assertMatch(<<"sha256:", _/binary>>, Hash),
+    ?assertMatch(<<"pbkdf2:", _/binary>>, Hash),
     ?assert(ersub_auth_srv:verify_password(<<"testpassword">>, Hash)),
     ?assertNot(ersub_auth_srv:verify_password(<<"wrongpassword">>, Hash)).
 

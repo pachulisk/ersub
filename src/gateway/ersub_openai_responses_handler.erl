@@ -54,7 +54,7 @@ do_pipeline(Req0, State, AuthCtx) ->
                                 {error, no_available_account} ->
                                     {ok, reply_json(503, #{error => #{message => <<"No accounts">>}}, Req1), State};
                                 {ok, Account} ->
-                                    forward(Req1, State, Account, Parsed, Body)
+                                    forward(Req1, State, Account, Parsed, Body, AuthCtx)
                             end
                     end
             end;
@@ -62,7 +62,7 @@ do_pipeline(Req0, State, AuthCtx) ->
             {ok, reply_json(400, #{error => #{message => <<"Read failed">>}}, Req0), State}
     end.
 
-forward(Req0, State, Account, Parsed, Body) ->
+forward(Req0, State, Account, Parsed, Body, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
     BaseUrl = case BaseUrl0 of
@@ -86,6 +86,13 @@ forward(Req0, State, Account, Parsed, Body) ->
         _ ->
             case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}) of
                 {ok, S, RH, RB} ->
+                    case S of
+                        Sc when Sc >= 200, Sc < 300 ->
+                            Model = maps:get(<<"model">>, Parsed, <<>>),
+                            ersub_billing_helper:record_non_streaming_usage(
+                                AuthCtx, maps:get(id, Account, 0), RB, Model);
+                        _ -> ok
+                    end,
                     {ok, cowboy_req:reply(S, filter_h(RH), RB, Req0), State};
                 _ ->
                     {ok, reply_json(502, #{error => #{message => <<"Upstream failed">>}}, Req0), State}

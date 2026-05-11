@@ -1,5 +1,5 @@
 ID,Priority,Severity,Task,Description,Files,Size,Status
-C1,P0,CRITICAL,7个gen_server加入Supervision Tree,"ersub_affiliate_srv/balance_notify_srv/health_srv/metrics_srv/usage_cleanup_srv/scheduled_test_srv/channel_monitor 未注册到 ersub_sup",src/ersub_sup.erl,S,TODO
+C1,P0,CRITICAL,7个gen_server加入Supervision Tree,"ersub_affiliate_srv/balance_notify_srv/health_srv/metrics_srv/usage_cleanup_srv/scheduled_test_srv/channel_monitor 未注册到 ersub_sup",src/ersub_sup.erl,S,DONE
 C2,P0,CRITICAL,非流式请求增加计费扣款+使用日志,"所有gateway handler非流式路径转发后未调用deduct/log，需解析upstream响应提取usage并扣费记录",src/gateway/ersub_claude_handler.erl src/gateway/ersub_openai_handler.erl src/gateway/ersub_gemini_handler.erl src/gateway/ersub_antigravity_handler.erl src/gateway/ersub_openai_images_handler.erl src/gateway/ersub_openai_responses_handler.erl,M,TODO
 C3,P0,CRITICAL,CLIPS Worker增加reload_rules handler,"ersub_clips_worker handle_call缺少reload_rules子句，导致热更新静默失败",src/clips/ersub_clips_worker.erl,S,TODO
 C4,P0,CRITICAL,密码哈希替换为bcrypt,"当前SHA-256不抗暴力破解，需加erlang bcrypt依赖替换hash_password/verify_password",src/auth/ersub_auth_srv.erl rebar.config,S,TODO

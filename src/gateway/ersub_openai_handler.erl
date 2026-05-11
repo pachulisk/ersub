@@ -90,12 +90,12 @@ do_pipeline(Req0, State, AuthCtx) ->
                             }}, Req1),
                             {ok, Req, State};
                         {ok, Account} ->
-                            forward_to_openai(Req1, State, Account, Parsed, Body)
+                            forward_to_openai(Req1, State, Account, Parsed, Body, AuthCtx)
                     end
             end
     end.
 
-forward_to_openai(Req0, State, Account, Parsed, Body) ->
+forward_to_openai(Req0, State, Account, Parsed, Body, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
     BaseUrl = case BaseUrl0 of
@@ -130,6 +130,13 @@ forward_to_openai(Req0, State, Account, Parsed, Body) ->
         _ ->
             case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}) of
                 {ok, Status, RespHeaders, RespBody} ->
+                    case Status of
+                        S when S >= 200, S < 300 ->
+                            Model = maps:get(<<"model">>, Parsed, <<>>),
+                            ersub_billing_helper:record_non_streaming_usage(
+                                AuthCtx, maps:get(id, Account, 0), RespBody, Model);
+                        _ -> ok
+                    end,
                     Filtered = filter_headers(RespHeaders),
                     Req = cowboy_req:reply(Status, Filtered, RespBody, Req0),
                     {ok, Req, State};

@@ -48,19 +48,32 @@ verify_jwt(Token) ->
             {error, invalid_token}
     end.
 
-%% Hash a password using SHA-256 with salt (simple for MVP).
-%% TODO: Use bcrypt/argon2 for production.
+%% Hash a password using PBKDF2-SHA256 (100,000 iterations).
 -spec hash_password(binary()) -> binary().
 hash_password(Password) ->
     Salt = crypto:strong_rand_bytes(16),
-    Hash = crypto:hash(sha256, <<Salt/binary, Password/binary>>),
+    Iterations = 100000,
+    DkLen = 32,
+    Hash = crypto:pbkdf2_hmac(sha256, Password, Salt, Iterations, DkLen),
     SaltHex = binary:encode_hex(Salt),
     HashHex = binary:encode_hex(Hash),
-    <<"sha256:", SaltHex/binary, ":", HashHex/binary>>.
+    <<"pbkdf2:", SaltHex/binary, ":", HashHex/binary>>.
 
 %% Verify a password against a stored hash.
+%% Supports PBKDF2 (current) and legacy SHA-256 (migration).
 -spec verify_password(binary(), binary()) -> boolean().
+verify_password(Password, <<"pbkdf2:", Rest/binary>>) ->
+    case binary:split(Rest, <<":">>) of
+        [SaltHex, HashHex] ->
+            Salt = binary:decode_hex(SaltHex),
+            Expected = binary:decode_hex(HashHex),
+            Actual = crypto:pbkdf2_hmac(sha256, Password, Salt, 100000, 32),
+            crypto:hash_equals(Expected, Actual);
+        _ ->
+            false
+    end;
 verify_password(Password, <<"sha256:", Rest/binary>>) ->
+    %% Legacy SHA-256 support for migration period
     case binary:split(Rest, <<":">>) of
         [SaltHex, HashHex] ->
             Salt = binary:decode_hex(SaltHex),

@@ -118,13 +118,13 @@ do_request_pipeline(Req0, State, AuthCtx) ->
                                     }}, Req1),
                                     {ok, Req, State};
                                 {ok, Account} ->
-                                    do_forward(Req1, State, Account, Parsed, Body)
+                                    do_forward(Req1, State, Account, Parsed, Body, AuthCtx)
                             end
                     end
             end
     end.
 
-do_forward(Req0, State, Account, Parsed, OrigBody) ->
+do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     %% OAuth bearer token from account credentials.access_token
     AccessToken = maps:get(<<"access_token">>, Creds,
@@ -150,6 +150,13 @@ do_forward(Req0, State, Account, Parsed, OrigBody) ->
         _ ->
             case http_request(Url, Headers, OrigBody) of
                 {ok, Status, RespHeaders, RespBody} ->
+                    case Status of
+                        S when S >= 200, S < 300 ->
+                            Model = maps:get(<<"model">>, Parsed, <<>>),
+                            ersub_billing_helper:record_non_streaming_usage(
+                                AuthCtx, maps:get(id, Account, 0), RespBody, Model);
+                        _ -> ok
+                    end,
                     FilteredHeaders = filter_response_headers(RespHeaders),
                     Req = cowboy_req:reply(Status, FilteredHeaders, RespBody, Req0),
                     {ok, Req, State};

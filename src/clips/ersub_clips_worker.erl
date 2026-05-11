@@ -104,6 +104,20 @@ handle_call(check_quota, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, State}
     end;
 
+handle_call(reload_rules, _From, #{port := Port} = State) ->
+    RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),
+    Cmd = #{<<"op">> => <<"reload">>, <<"dir">> => list_to_binary(RulesDir)},
+    case port_command_json(Port, Cmd, State) of
+        {ok, #{<<"op">> := <<"ok">>}, NewState} ->
+            logger:info("CLIPS rules reloaded on worker ~p", [self()]),
+            {reply, ok, NewState};
+        {ok, _, NewState} ->
+            {reply, ok, NewState};
+        {error, Reason} ->
+            logger:error("CLIPS reload failed: ~p", [Reason]),
+            {reply, {error, Reason}, State}
+    end;
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
