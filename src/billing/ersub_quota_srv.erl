@@ -25,13 +25,32 @@ check_quota(UserId, GroupId, AdditionalCost) ->
         [UserId, GroupId]
     ) of
         {ok, _, [{_SubId, DUsage, WUsage, MUsage, DLimit, WLimit, MLimit}]} ->
-            check_limits(AdditionalCost,
-                         to_num(DUsage), to_num(WUsage), to_num(MUsage),
-                         to_num(DLimit), to_num(WLimit), to_num(MLimit));
+            %% Use CLIPS quota.clp rules for quota checking
+            QuotaData = #{
+                user_id => UserId, group_id => GroupId,
+                daily_limit => to_num(DLimit), daily_usage => to_num(DUsage),
+                weekly_limit => to_num(WLimit), weekly_usage => to_num(WUsage),
+                monthly_limit => to_num(MLimit), monthly_usage => to_num(MUsage),
+                additional_cost => AdditionalCost
+            },
+            case ersub_clips_pool:check_quota(QuotaData) of
+                {ok, #{violations := []}} ->
+                    ok;
+                {ok, #{violations := [V | _]}} ->
+                    Type = case maps:get(<<"type">>, V, <<"daily">>) of
+                        <<"daily">> -> daily;
+                        <<"weekly">> -> weekly;
+                        <<"monthly">> -> monthly;
+                        Other -> binary_to_atom(Other)
+                    end,
+                    {error, {quota_exceeded, Type}};
+                {error, _} ->
+                    ok %% CLIPS error: fail open
+            end;
         {ok, _, []} ->
-            ok; %% No subscription = no quota limits (balance-based)
+            ok;
         {error, _} ->
-            ok %% On error, fail open
+            ok
     end.
 
 %%% gen_server callbacks
@@ -69,17 +88,7 @@ handle_info(_Info, State) ->
 
 %%% Internal
 
-check_limits(Cost, DUsage, _WUsage, _MUsage, DLimit, _WLimit, _MLimit)
-  when DLimit =/= null, DLimit > 0, DUsage + Cost > DLimit ->
-    {error, {quota_exceeded, daily}};
-check_limits(Cost, _DUsage, WUsage, _MUsage, _DLimit, WLimit, _MLimit)
-  when WLimit =/= null, WLimit > 0, WUsage + Cost > WLimit ->
-    {error, {quota_exceeded, weekly}};
-check_limits(Cost, _DUsage, _WUsage, MUsage, _DLimit, _WLimit, MLimit)
-  when MLimit =/= null, MLimit > 0, MUsage + Cost > MLimit ->
-    {error, {quota_exceeded, monthly}};
-check_limits(_, _, _, _, _, _, _) ->
-    ok.
+%% check_limits removed — quota checking now done via CLIPS quota.clp rules
 
 reset_daily_quotas() ->
     case ersub_repo:squery(

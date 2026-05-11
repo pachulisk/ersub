@@ -3,8 +3,7 @@
 -export([record_non_streaming_usage/4]).
 
 %% Record usage and deduct billing for a non-streaming response.
-%% Parses the upstream response body for token usage, logs to usage_logs,
-%% and deducts from user balance.
+%% Uses CLIPS billing.clp rules for cost calculation.
 -spec record_non_streaming_usage(map(), integer(), binary(), binary()) -> ok.
 
 record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel) ->
@@ -15,21 +14,18 @@ record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel) ->
     CacheReadTokens = maps:get(cache_read_tokens, Usage, 0),
     CacheCreationTokens = maps:get(cache_creation_tokens, Usage, 0),
 
-    %% Calculate cost from pricing table
-    ActualCost = calculate_cost(RequestedModel, Usage),
+    %% Calculate cost via CLIPS billing.clp rules
+    ActualCost = calculate_cost_clips(RequestedModel, Usage),
 
-    %% Deduct balance
     case ActualCost > 0 of
         true -> ersub_billing_srv:deduct(UserId, ActualCost);
         false -> ok
     end,
 
-    %% Check billing dedup
     RequestId = generate_request_id(),
     case ersub_billing_dedup:check_and_mark(RequestId) of
         {error, already_billed} -> ok;
         ok ->
-            %% Log usage record
             ersub_usage_logger:log(#{
                 user_id => UserId,
                 api_key_id => KeyId,
@@ -43,7 +39,7 @@ record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel) ->
                 total_cost => ActualCost,
                 actual_cost => ActualCost,
                 stream => false,
-                request_type => 1  %% sync
+                request_type => 1
             })
     end,
     ok.
@@ -54,13 +50,10 @@ extract_usage(Body) when is_binary(Body) ->
     try
         Json = jsx:decode(Body, [return_maps]),
         extract_usage_from_json(Json)
-    catch _:_ ->
-        #{}
+    catch _:_ -> #{}
     end;
-extract_usage(_) ->
-    #{}.
+extract_usage(_) -> #{}.
 
-%% Anthropic format
 extract_usage_from_json(#{<<"usage">> := U}) when is_map(U) ->
     #{
         input_tokens => maps:get(<<"input_tokens">>, U, 0),
@@ -68,22 +61,31 @@ extract_usage_from_json(#{<<"usage">> := U}) when is_map(U) ->
         cache_read_tokens => maps:get(<<"cache_read_input_tokens">>, U, 0),
         cache_creation_tokens => maps:get(<<"cache_creation_input_tokens">>, U, 0)
     };
-%% OpenAI format
 extract_usage_from_json(#{<<"usage">> := #{<<"prompt_tokens">> := PT,
                                            <<"completion_tokens">> := CT}}) ->
     #{input_tokens => PT, output_tokens => CT};
-extract_usage_from_json(_) ->
-    #{}.
+extract_usage_from_json(_) -> #{}.
 
-calculate_cost(Model, Usage) ->
-    InputTokens = maps:get(input_tokens, Usage, 0),
-    OutputTokens = maps:get(output_tokens, Usage, 0),
-    case ersub_pricing_srv:get_pricing(Model) of
-        {ok, Pricing} ->
-            IP = maps:get(input_price, Pricing, 0),
-            OP = maps:get(output_price, Pricing, 0),
-            InputTokens * IP + OutputTokens * OP;
-        {error, _} ->
+%% Calculate cost via CLIPS billing.clp rules engine
+calculate_cost_clips(Model, Usage) ->
+    ClipsUsage = #{
+        model => Model,
+        input_tokens => maps:get(input_tokens, Usage, 0),
+        output_tokens => maps:get(output_tokens, Usage, 0),
+        cache_read_tokens => maps:get(cache_read_tokens, Usage, 0),
+        cache_5m_tokens => maps:get(cache_5m_tokens, Usage, 0),
+        cache_1h_tokens => maps:get(cache_1h_tokens, Usage, 0),
+        image_output_tokens => maps:get(image_output_tokens, Usage, 0),
+        service_tier => maps:get(service_tier, Usage, standard),
+        account_rate_mult => maps:get(account_rate_mult, Usage, 1.0),
+        group_rate_mult => maps:get(group_rate_mult, Usage, 1.0),
+        total_input_tokens => maps:get(input_tokens, Usage, 0),
+        billing_mode => maps:get(billing_mode, Usage, token)
+    },
+    case ersub_clips_pool:calculate_billing(ClipsUsage) of
+        {ok, Result} ->
+            maps:get(<<"actual-cost">>, Result, 0.0);
+        {error, _Reason} ->
             0
     end.
 

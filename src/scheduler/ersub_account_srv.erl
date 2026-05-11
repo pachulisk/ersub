@@ -129,33 +129,23 @@ handle_cast({error, StatusCode}, State) ->
     NewEwmaError = ewma(State#state.ewma_error_rate, 1.0, ?EWMA_ALPHA),
     NewLoad = max(0, State#state.current_load - 1),
     Now = erlang:monotonic_time(millisecond),
-    NewState = case StatusCode of
-        429 ->
-            State#state{
-                status = rate_limited,
-                rate_limited_until = Now + ?RATE_LIMIT_COOLDOWN_MS,
-                ewma_error_rate = NewEwmaError,
-                current_load = NewLoad
-            };
-        529 ->
-            State#state{
-                status = overloaded,
-                overload_until = Now + ?OVERLOAD_COOLDOWN_MS,
-                ewma_error_rate = NewEwmaError,
-                current_load = NewLoad
-            };
-        Code when Code =:= 502; Code =:= 503 ->
-            State#state{
-                status = overloaded,
-                overload_until = Now + ?OVERLOAD_COOLDOWN_MS,
-                ewma_error_rate = NewEwmaError,
-                current_load = NewLoad
-            };
+    %% Use CLIPS account_status.clp rules for state transition
+    EventType = status_code_to_event(StatusCode),
+    Event = #{account_id => State#state.id, event_type => EventType,
+              timestamp => erlang:system_time(second)},
+    NewState = case ersub_clips_pool:evaluate_account_status(Event) of
+        {ok, #{<<"new-status">> := NewStatusBin, <<"cooldown-ms">> := CooldownMs}} ->
+            NewStatus = binary_to_status(NewStatusBin),
+            CooldownInt = case CooldownMs of
+                V when is_integer(V) -> V;
+                V when is_float(V) -> trunc(V);
+                _ -> 0
+            end,
+            apply_status_transition(State, NewStatus, CooldownInt, Now,
+                                    NewEwmaError, NewLoad);
         _ ->
-            State#state{
-                ewma_error_rate = NewEwmaError,
-                current_load = NewLoad
-            }
+            %% CLIPS unavailable: apply base state change
+            State#state{ewma_error_rate = NewEwmaError, current_load = NewLoad}
     end,
     {noreply, NewState};
 
@@ -248,6 +238,29 @@ state_to_map(S) ->
         current_load => S#state.current_load,
         load_rate => load_rate(S)
     }.
+
+status_code_to_event(429) -> error_429;
+status_code_to_event(502) -> error_502;
+status_code_to_event(503) -> error_503;
+status_code_to_event(529) -> error_529;
+status_code_to_event(_) -> error_other.
+
+apply_status_transition(State, active, _, _Now, EwmaErr, Load) ->
+    State#state{status = active, ewma_error_rate = EwmaErr, current_load = Load};
+apply_status_transition(State, rate_limited, CooldownMs, Now, EwmaErr, Load) ->
+    State#state{status = rate_limited,
+                rate_limited_until = Now + CooldownMs,
+                ewma_error_rate = EwmaErr, current_load = Load};
+apply_status_transition(State, overloaded, CooldownMs, Now, EwmaErr, Load) ->
+    State#state{status = overloaded,
+                overload_until = Now + CooldownMs,
+                ewma_error_rate = EwmaErr, current_load = Load};
+apply_status_transition(State, temp_unschedulable, CooldownMs, Now, EwmaErr, Load) ->
+    State#state{status = temp_unschedulable,
+                temp_unsched_until = Now + CooldownMs,
+                ewma_error_rate = EwmaErr, current_load = Load};
+apply_status_transition(State, _, _, _Now, EwmaErr, Load) ->
+    State#state{ewma_error_rate = EwmaErr, current_load = Load}.
 
 binary_to_status(<<"active">>) -> active;
 binary_to_status(<<"rate_limited">>) -> rate_limited;

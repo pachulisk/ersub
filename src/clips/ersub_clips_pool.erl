@@ -2,10 +2,13 @@
 
 -export([start_link/0, stop/0]).
 -export([with_worker/1, reload_rules/0]).
+%% Convenience wrappers for CLIPS decision APIs
+-export([select_account/2, calculate_billing/1, check_quota/1,
+         evaluate_account_status/1, resolve_model_route/1,
+         evaluate_error_passthrough/1]).
 
 -define(POOL, ersub_clips_pool).
 
-%% Start the CLIPS worker pool.
 start_link() ->
     PoolSize = ersub_config_srv:get(clips_pool_size, 8),
     PoolArgs = [
@@ -17,42 +20,58 @@ start_link() ->
     ],
     poolboy:start_link(PoolArgs, []).
 
-stop() ->
-    %% Graceful shutdown handled by supervisor
-    ok.
+stop() -> ok.
 
-%% Checkout a worker, run a function, then check in.
--spec with_worker(fun((pid()) -> T)) -> T when T :: term().
 with_worker(Fun) ->
     Worker = poolboy:checkout(?POOL, true, 5000),
-    try
-        Fun(Worker)
-    after
-        poolboy:checkin(?POOL, Worker)
+    try Fun(Worker)
+    after poolboy:checkin(?POOL, Worker)
     end.
 
-%% Reload rules on all workers (rolling update).
--spec reload_rules() -> ok.
 reload_rules() ->
-    Workers = get_all_workers(),
-    lists:foreach(fun(Worker) ->
-        try
-            gen_server:call(Worker, reload_rules, 10000)
-        catch _:_ ->
-            logger:warning("Failed to reload rules on worker ~p", [Worker])
-        end
-    end, Workers),
-    logger:info("Rules reloaded on ~p workers", [length(Workers)]),
-    ok.
+    with_worker(fun(W) -> gen_server:call(W, reload_rules, 10000) end).
 
-%%% Internal
+%%% CLIPS Decision API Wrappers
+%%% Each checks out a worker, calls the decision, checks back in.
 
-get_all_workers() ->
-    Status = poolboy:status(?POOL),
-    case Status of
-        {_StateType, AvailableWorkers, _Overflow, _Monitors} when is_integer(AvailableWorkers) ->
-            %% Get all workers by checking them out and back
-            [];
-        _ ->
-            []
-    end.
+%% Score candidates and return ranked account scores.
+-spec select_account([map()], map()) -> {ok, [map()]} | {error, term()}.
+select_account(Candidates, Weights) ->
+    with_worker(fun(W) ->
+        ersub_clips_worker:select_account(W, Candidates, Weights)
+    end).
+
+%% Calculate billing cost for a usage record.
+-spec calculate_billing(map()) -> {ok, map()} | {error, term()}.
+calculate_billing(UsageData) ->
+    with_worker(fun(W) ->
+        ersub_clips_worker:calculate_billing(W, UsageData)
+    end).
+
+%% Check subscription quota.
+-spec check_quota(map()) -> {ok, map()} | {error, term()}.
+check_quota(QuotaData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {check_quota, QuotaData}, 10000)
+    end).
+
+%% Evaluate account status transition based on an event.
+-spec evaluate_account_status(map()) -> {ok, map()} | {error, term()}.
+evaluate_account_status(Event) ->
+    with_worker(fun(W) ->
+        ersub_clips_worker:evaluate_account_status(W, Event)
+    end).
+
+%% Resolve model routing for a group.
+-spec resolve_model_route(map()) -> {ok, [integer()]} | {error, term()}.
+resolve_model_route(RouteReq) ->
+    with_worker(fun(W) ->
+        ersub_clips_worker:resolve_model_route(W, RouteReq)
+    end).
+
+%% Evaluate error passthrough rules.
+-spec evaluate_error_passthrough(map()) -> {ok, map()} | {error, term()}.
+evaluate_error_passthrough(ErrorData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_error, ErrorData}, 10000)
+    end).

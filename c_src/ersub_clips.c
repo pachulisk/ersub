@@ -162,19 +162,30 @@ int main(int argc, char *argv[]) {
             /* Each fact is a CLIPS fact string in "assert_string" field */
             const char *facts = json_get_array(line, "facts");
             if (facts) {
-                /* Parse array of strings - simplified: look for "assert_string" fields */
+                /* Parse array of strings - handles JSON-escaped quotes */
                 const char *p = facts;
                 char assertStr[4096];
                 while ((p = strstr(p, "\"assert_string\":\"")) != NULL) {
                     p += strlen("\"assert_string\":\"");
-                    const char *end = strchr(p, '"');
-                    if (end && (end - p) < (int)sizeof(assertStr)) {
-                        int slen = (int)(end - p);
-                        memcpy(assertStr, p, slen);
-                        assertStr[slen] = '\0';
+                    /* Find end quote, skipping escaped \" */
+                    int i = 0;
+                    while (*p && i < (int)sizeof(assertStr) - 1) {
+                        if (*p == '\\' && *(p+1) == '"') {
+                            /* JSON escaped quote → CLIPS double quote */
+                            assertStr[i++] = '"';
+                            p += 2;
+                        } else if (*p == '"') {
+                            /* Unescaped quote = end of JSON string */
+                            break;
+                        } else {
+                            assertStr[i++] = *p++;
+                        }
+                    }
+                    assertStr[i] = '\0';
+                    if (i > 0) {
                         assert_fact_string(env, assertStr);
                     }
-                    p = end ? end + 1 : p + 1;
+                    if (*p == '"') p++;
                 }
             }
             printf("{\"op\":\"ok\"}\n");

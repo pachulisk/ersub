@@ -85,17 +85,14 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
             {error, no_available_account}
     end.
 
-%% Layer 2: Score-based selection
-%% For MVP without CLIPS: simple priority-based selection from DB
+%% Layer 2: Score-based selection via CLIPS scheduling.clp rules
 select_by_score(Req) ->
     Platform = maps:get(platform, Req, undefined),
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
     case ersub_platform_sup:list_accounts() of
         [] ->
-            %% No account processes running, fall back to DB
             select_from_db(Platform, ExcludedIds);
         AccountIds ->
-            %% Collect stats from running account processes
             Candidates = lists:filtermap(fun(Id) ->
                 case is_map_key(Id, ExcludedIds) of
                     true -> false;
@@ -110,29 +107,37 @@ select_by_score(Req) ->
                         end
                 end
             end, AccountIds),
-            select_best_candidate(Candidates, Req)
+            select_best_candidate_clips(Candidates, Req)
     end.
 
-select_best_candidate([], _Req) ->
+select_best_candidate_clips([], _Req) ->
     {error, no_available_account};
-select_best_candidate(Candidates, _Req) ->
-    %% Simple scoring: priority (lower is better) + load_rate (lower is better)
-    Scored = lists:map(fun(C) ->
-        Priority = maps:get(priority, C, 100),
-        LoadRate = maps:get(load_rate, C, 0.0),
-        ErrorRate = maps:get(ewma_error_rate, C, 0.0),
-        Score = (1.0 - Priority / 200.0) * 1.0 +
-                (1.0 - LoadRate) * 1.0 +
-                (1.0 - ErrorRate) * 0.8,
-        {Score, C}
-    end, Candidates),
-    Sorted = lists:reverse(lists:keysort(1, Scored)),
-    %% Top-K weighted random selection
-    TopK = min(ersub_config_srv:get(scheduling_top_k, 7), length(Sorted)),
-    TopCandidates = lists:sublist(Sorted, TopK),
-    {_Score, Selected} = pick_weighted_random(TopCandidates),
-    AccountId = maps:get(id, Selected),
-    get_full_account(AccountId).
+select_best_candidate_clips(Candidates, _Req) ->
+    %% Score all candidates via CLIPS scheduling.clp rules
+    Weights = #{
+        priority => ersub_config_srv:get(scheduling_score_weights_priority, 1.0),
+        load => ersub_config_srv:get(scheduling_score_weights_load, 1.0),
+        queue => ersub_config_srv:get(scheduling_score_weights_queue, 0.7),
+        error_rate => ersub_config_srv:get(scheduling_score_weights_error_rate, 0.8),
+        ttft => ersub_config_srv:get(scheduling_score_weights_ttft, 0.5)
+    },
+    case ersub_clips_pool:select_account(Candidates, Weights) of
+        {ok, Scores} when length(Scores) > 0 ->
+            %% Pick best from CLIPS scores (top-k weighted random)
+            ValidScores = [{maps:get(<<"score">>, S, 0.0), maps:get(<<"id">>, S, 0)}
+                           || S <- Scores, maps:get(<<"score">>, S, -1) >= 0],
+            case ValidScores of
+                [] -> {error, no_available_account};
+                _ ->
+                    Sorted = lists:reverse(lists:keysort(1, ValidScores)),
+                    TopK = min(ersub_config_srv:get(scheduling_top_k, 7), length(Sorted)),
+                    Top = lists:sublist(Sorted, TopK),
+                    {_, SelectedId} = pick_weighted_random(Top),
+                    get_full_account(SelectedId)
+            end;
+        _ ->
+            {error, no_available_account}
+    end.
 
 select_from_db(Platform, ExcludedIds) ->
     Filters = case Platform of
