@@ -144,6 +144,16 @@ init([]) ->
         #{id => ersub_channel_monitor,
           start => {ersub_channel_monitor, start_link, []},
           restart => permanent,
+          type => worker},
+
+        #{id => ersub_idempotency,
+          start => {ersub_idempotency, start_link, []},
+          restart => permanent,
+          type => worker},
+
+        #{id => ersub_account_stats_cache,
+          start => {ersub_account_stats_cache, start_link, []},
+          restart => permanent,
           type => worker}
         %% NOTE: Cowboy listener started in ersub_app:start/2
     ],

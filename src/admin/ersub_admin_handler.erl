@@ -504,6 +504,228 @@ handle(<<"POST">>, [<<"affiliates">>, IdBin, <<"unfreeze">>], Req0, State, _Clai
         {error, Reason} -> reply_err(500, Reason, Req0, State)
     end;
 
+%% === Group Dispatch Config (F03) ===
+
+%% GET /api/v1/admin/groups/:id/dispatch
+handle(<<"GET">>, [<<"groups">>, IdBin, <<"dispatch">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "SELECT messages_dispatch, messages_dispatch_model_config "
+        "FROM groups WHERE id = $1", [Id]
+    ) of
+        {ok, _, [{Dispatch, ModelConfig}]} ->
+            reply_ok(#{data => #{
+                messages_dispatch => Dispatch,
+                messages_dispatch_model_config => decode_nullable_json(ModelConfig)
+            }}, Req0, State);
+        {ok, _, []} ->
+            reply_err(404, not_found, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% PUT /api/v1/admin/groups/:id/dispatch
+handle(<<"PUT">>, [<<"groups">>, IdBin, <<"dispatch">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Dispatch = maps:get(<<"messages_dispatch">>, Params, null),
+    ModelConfig = case maps:get(<<"messages_dispatch_model_config">>, Params, null) of
+        null -> null;
+        MC -> jsx:encode(MC)
+    end,
+    case ersub_repo:query(
+        "UPDATE groups SET messages_dispatch = $2, "
+        "messages_dispatch_model_config = $3 WHERE id = $1",
+        [Id, Dispatch, ModelConfig]
+    ) of
+        {ok, 1} ->
+            ersub_clips_pool:reload_rules(),
+            reply_ok(#{success => true}, Req1, State);
+        {ok, 0} ->
+            reply_err(404, not_found, Req1, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req1, State)
+    end;
+
+%% === Account Today Stats (F04) ===
+
+%% GET /api/v1/admin/accounts/today-stats
+handle(<<"GET">>, [<<"accounts">>, <<"today-stats">>], Req0, State, _Claims) ->
+    QS = cowboy_req:parse_qs(Req0),
+    AccountIds = case proplists:get_value(<<"account_ids">>, QS, undefined) of
+        undefined ->
+            %% Return stats for all active accounts
+            case ersub_repo:squery(
+                "SELECT id FROM accounts WHERE status = 'active' ORDER BY id"
+            ) of
+                {ok, _, Rows} -> [binary_to_integer(AId) || {AId} <- Rows];
+                _ -> []
+            end;
+        IdsBin ->
+            [binary_to_integer(string:trim(I))
+             || I <- binary:split(IdsBin, <<",">>, [global]),
+                I =/= <<>>]
+    end,
+    case ersub_account_stats_cache:get_batch_stats(AccountIds) of
+        {ok, Stats} ->
+            reply_ok(#{data => Stats}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% === Batch Redeem/Promo (F14) ===
+
+%% POST /api/v1/admin/redeem/batch
+handle(<<"POST">>, [<<"redeem">>, <<"batch">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Codes = maps:get(<<"codes">>, Params, []),
+    Results = lists:map(fun(Item) ->
+        Code = maps:get(<<"code">>, Item),
+        Amount = maps:get(<<"amount">>, Item),
+        case ersub_repo:query(
+            "INSERT INTO redeem_codes (code, amount) VALUES ($1, $2) "
+            "ON CONFLICT (code) DO NOTHING RETURNING id",
+            [Code, Amount]
+        ) of
+            {ok, 1, _, [{Id}]} -> #{code => Code, id => Id, status => <<"created">>};
+            {ok, 0, _, _} -> #{code => Code, status => <<"duplicate">>};
+            {ok, 0} -> #{code => Code, status => <<"duplicate">>};
+            {error, Reason} ->
+                #{code => Code, status => <<"error">>,
+                  message => iolist_to_binary(io_lib:format("~p", [Reason]))}
+        end
+    end, Codes),
+    reply_ok(#{data => Results}, Req1, State);
+
+%% POST /api/v1/admin/promo/batch
+handle(<<"POST">>, [<<"promo">>, <<"batch">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Codes = maps:get(<<"codes">>, Params, []),
+    Results = lists:map(fun(Item) ->
+        Code = maps:get(<<"code">>, Item),
+        DiscountType = maps:get(<<"discount_type">>, Item),
+        DiscountValue = maps:get(<<"discount_value">>, Item),
+        case ersub_repo:query(
+            "INSERT INTO promo_codes (code, discount_type, discount_value) "
+            "VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING RETURNING id",
+            [Code, DiscountType, DiscountValue]
+        ) of
+            {ok, 1, _, [{Id}]} -> #{code => Code, id => Id, status => <<"created">>};
+            {ok, 0, _, _} -> #{code => Code, status => <<"duplicate">>};
+            {ok, 0} -> #{code => Code, status => <<"duplicate">>};
+            {error, Reason} ->
+                #{code => Code, status => <<"error">>,
+                  message => iolist_to_binary(io_lib:format("~p", [Reason]))}
+        end
+    end, Codes),
+    reply_ok(#{data => Results}, Req1, State);
+
+%% === Proxy CRUD (F18) ===
+
+%% GET /api/v1/admin/proxies
+handle(<<"GET">>, [<<"proxies">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT id, url, protocol, is_active, created_at "
+        "FROM proxies ORDER BY id"
+    ) of
+        {ok, _, Rows} ->
+            Proxies = [#{id => PId, url => Url, protocol => Proto,
+                         is_active => Active, created_at => CA}
+                       || {PId, Url, Proto, Active, CA} <- Rows],
+            reply_ok(#{data => Proxies}, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% POST /api/v1/admin/proxies
+handle(<<"POST">>, [<<"proxies">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Url = maps:get(<<"url">>, Params),
+    Protocol = maps:get(<<"protocol">>, Params, <<"http">>),
+    case ersub_repo:query(
+        "INSERT INTO proxies (url, protocol) VALUES ($1, $2) "
+        "RETURNING id, created_at",
+        [Url, Protocol]
+    ) of
+        {ok, 1, _, [{Id, CA}]} ->
+            reply_ok(#{data => #{id => Id, url => Url, protocol => Protocol,
+                                 created_at => CA}}, Req1, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req1, State)
+    end;
+
+%% DELETE /api/v1/admin/proxies/:id
+handle(<<"DELETE">>, [<<"proxies">>, IdBin], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query("DELETE FROM proxies WHERE id = $1", [Id]) of
+        {ok, 1} -> reply_ok(#{success => true}, Req0, State);
+        {ok, 0} -> reply_err(404, not_found, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
+%% === Account Temp-Unschedule (F21) ===
+
+%% POST /api/v1/admin/accounts/:id/temp-unschedule
+handle(<<"POST">>, [<<"accounts">>, IdBin, <<"temp-unschedule">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_account_srv:update_status(Id, temp_unschedulable) of
+        ok -> reply_ok(#{success => true}, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
+%% POST /api/v1/admin/accounts/:id/recover
+handle(<<"POST">>, [<<"accounts">>, IdBin, <<"recover">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_account_srv:update_status(Id, active) of
+        ok -> reply_ok(#{success => true}, Req0, State);
+        {error, Reason} -> reply_err(500, Reason, Req0, State)
+    end;
+
+%% === Account Notes (F25) ===
+
+%% GET /api/v1/admin/accounts/:id/notes
+handle(<<"GET">>, [<<"accounts">>, IdBin, <<"notes">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "SELECT notes, extra FROM accounts WHERE id = $1", [Id]
+    ) of
+        {ok, _, [{Notes, Extra}]} ->
+            reply_ok(#{data => #{
+                notes => Notes,
+                extra => decode_nullable_json(Extra)
+            }}, Req0, State);
+        {ok, _, []} ->
+            reply_err(404, not_found, Req0, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% PUT /api/v1/admin/accounts/:id/notes
+handle(<<"PUT">>, [<<"accounts">>, IdBin, <<"notes">>], Req0, State, _Claims) ->
+    Id = binary_to_integer(IdBin),
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Notes = maps:get(<<"notes">>, Params, null),
+    Extra = case maps:get(<<"extra">>, Params, null) of
+        null -> null;
+        E -> jsx:encode(E)
+    end,
+    case ersub_repo:query(
+        "UPDATE accounts SET notes = $2, extra = $3, updated_at = NOW() WHERE id = $1",
+        [Id, Notes, Extra]
+    ) of
+        {ok, 1} ->
+            reply_ok(#{success => true}, Req1, State);
+        {ok, 0} ->
+            reply_err(404, not_found, Req1, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req1, State)
+    end;
+
 handle(_, _, Req0, State, _) ->
     Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
     {ok, Req, State}.
@@ -564,6 +786,14 @@ build_usage_filters(UserFilter, ModelFilter) ->
         _ -> iolist_to_binary([" WHERE 1=1" | lists:reverse(Clauses)])
     end,
     {WhereClause, Params}.
+
+decode_nullable_json(null) -> null;
+decode_nullable_json(undefined) -> null;
+decode_nullable_json(Json) when is_binary(Json) ->
+    try jsx:decode(Json, [return_maps])
+    catch _:_ -> Json
+    end;
+decode_nullable_json(Other) -> Other.
 
 csv_field(null) -> <<>>;
 csv_field(undefined) -> <<>>;

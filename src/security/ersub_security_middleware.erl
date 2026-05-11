@@ -1,7 +1,7 @@
 -module(ersub_security_middleware).
 
 -export([apply_security_headers/1, apply_cors_headers/2, handle_preflight/1,
-         check_backend_mode/1, check_content_length/2]).
+         check_backend_mode/1, check_backend_mode/2, check_content_length/2]).
 
 %% Apply security headers to a response.
 -spec apply_security_headers(cowboy_req:req()) -> cowboy_req:req().
@@ -60,6 +60,17 @@ check_backend_mode(_Method) ->
         <<"read_only">> -> {error, read_only};
         _ -> ok
     end.
+
+%% Check backend mode with path-based whitelist.
+%% Whitelisted paths (/health, /api/v1/auth/*) are always allowed regardless of mode.
+-spec check_backend_mode(binary() | {binary(), boolean()}, binary()) ->
+    ok | {error, read_only}.
+
+check_backend_mode(_MethodOrTuple, <<"/health", _/binary>>) -> ok;
+check_backend_mode(_MethodOrTuple, <<"/api/v1/auth/", _/binary>>) -> ok;
+check_backend_mode({_Method, true}, _Path) -> ok;
+check_backend_mode({Method, false}, Path) -> check_backend_mode(Method, Path);
+check_backend_mode(Method, _Path) -> check_backend_mode(Method).
 
 %% Check Content-Length header against maximum allowed size.
 %% MaxBytes is the maximum allowed content length in bytes.

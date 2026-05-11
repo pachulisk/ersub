@@ -95,6 +95,21 @@ do_request_pipeline(Req0, State, AuthCtx) ->
                     {ok, Req, State};
                 true ->
                     Parsed = jsx:decode(Body, [return_maps]),
+                    %% 5b. Warmup request interception
+                    case is_warmup_request(Parsed) of
+                        true ->
+                            WarmupResp = #{
+                                <<"type">> => <<"message">>,
+                                <<"role">> => <<"assistant">>,
+                                <<"content">> => [#{
+                                    <<"type">> => <<"text">>,
+                                    <<"text">> => <<"New Conversation">>
+                                }],
+                                <<"stop_reason">> => <<"end_turn">>
+                            },
+                            Req2 = reply_json(200, WarmupResp, Req1),
+                            {ok, Req2, State};
+                        false ->
                     %% 6. Balance pre-check
                     case ersub_billing_srv:check_balance(UserId, 0.001) of
                         {error, insufficient_balance} ->
@@ -124,6 +139,7 @@ do_request_pipeline(Req0, State, AuthCtx) ->
                                     do_forward(Req1, State, Account, Parsed, Body, AuthCtx)
                             end
                     end
+                    end %% end is_warmup_request case
             end
     end.
 
@@ -341,6 +357,27 @@ await_body(ConnPid, StreamRef, MRef, Status, Headers, Acc) ->
     end.
 
 %%% Helpers
+
+%% Check if the request is a warmup request by inspecting the first message content.
+is_warmup_request(Parsed) ->
+    Messages = maps:get(<<"messages">>, Parsed, []),
+    case Messages of
+        [#{<<"content">> := Content} | _] when is_binary(Content) ->
+            case binary:match(Content, <<"Warmup">>) of
+                nomatch -> false;
+                _ -> true
+            end;
+        [#{<<"content">> := Content} | _] when is_list(Content) ->
+            lists:any(fun
+                (#{<<"type">> := <<"text">>, <<"text">> := Text}) when is_binary(Text) ->
+                    case binary:match(Text, <<"Warmup">>) of
+                        nomatch -> false;
+                        _ -> true
+                    end;
+                (_) -> false
+            end, Content);
+        _ -> false
+    end.
 
 check_ip_access(Req, AuthCtx) ->
     #{ip_whitelist := WL, ip_blacklist := BL} = AuthCtx,

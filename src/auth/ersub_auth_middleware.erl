@@ -1,6 +1,7 @@
 -module(ersub_auth_middleware).
 
--export([authenticate/1, hash_api_key/1, init_cache/0, reply_error/3]).
+-export([authenticate/1, hash_api_key/1, init_cache/0, reply_error/3,
+         check_group_assignment/1]).
 
 %% ETS table for API key cache
 -define(KEY_CACHE, ersub_api_key_cache).
@@ -125,6 +126,19 @@ validate_auth_context(#{expires_at := ExpiresAt} = Ctx) when ExpiresAt =/= null 
     end;
 validate_auth_context(Ctx) ->
     {ok, Ctx}.
+
+%% Check if a user has at least one group assignment via user_allowed_groups.
+%% Returns ok if assigned, {error, no_group_assigned} otherwise.
+-spec check_group_assignment(integer()) -> ok | {error, no_group_assigned}.
+check_group_assignment(UserId) ->
+    case ersub_repo:query(
+        "SELECT 1 FROM user_allowed_groups WHERE user_id = $1 LIMIT 1",
+        [UserId]
+    ) of
+        {ok, _, [_|_]} -> ok;
+        {ok, _, []} -> {error, no_group_assigned};
+        {error, _Reason} -> {error, no_group_assigned}
+    end.
 
 reply_error(Req, StatusCode, Message) ->
     Body = jsx:encode(#{
