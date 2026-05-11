@@ -38,7 +38,14 @@ handle_call(_, _From, State) -> {reply, ok, State}.
 handle_cast(_, State) -> {noreply, State}.
 
 handle_info(aggregate, State) ->
-    do_aggregation(),
+    %% O04: Advisory lock to prevent concurrent aggregation across instances
+    case acquire_advisory_lock(42001) of
+        ok ->
+            do_aggregation(),
+            release_advisory_lock(42001);
+        locked ->
+            logger:debug("Metrics aggregation skipped: advisory lock held by another instance")
+    end,
     schedule_aggregation(),
     {noreply, State#{last_aggregation => calendar:universal_time()}}.
 
@@ -66,3 +73,13 @@ do_aggregation() ->
         {error, Reason} ->
             logger:warning("Metrics aggregation failed: ~p", [Reason])
     end.
+
+acquire_advisory_lock(LockId) ->
+    case ersub_repo:query("SELECT pg_try_advisory_lock($1)", [LockId]) of
+        {ok, _, [{true}]} -> ok;
+        _ -> locked
+    end.
+
+release_advisory_lock(LockId) ->
+    ersub_repo:query("SELECT pg_advisory_unlock($1)", [LockId]),
+    ok.

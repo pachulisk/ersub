@@ -2,7 +2,8 @@
 
 -export([transform_claude_request/2, build_upstream_headers/2,
          resolve_model_mapping/2, match_wildcard/2,
-         resolve_model_chain/3]).
+         resolve_model_chain/3,
+         apply_privacy_headers/2, apply_session_id/2]).
 
 %% Transform a Claude API request body before forwarding upstream.
 %% Handles model passthrough, system prompt preservation, metadata stripping.
@@ -103,4 +104,36 @@ match_wildcard(Model, [{Pattern, Target} | Rest]) ->
             end;
         nomatch ->
             match_wildcard(Model, Rest)
+    end.
+
+%% A04: Privacy mode — inject training opt-out headers
+-spec apply_privacy_headers([{binary(), binary()}], map()) -> [{binary(), binary()}].
+apply_privacy_headers(Headers, Account) ->
+    Privacy = maps:get(<<"privacy_mode">>, maps:get(credentials, Account, #{}), false),
+    Platform = maps:get(platform, Account, <<>>),
+    case Privacy of
+        true ->
+            case Platform of
+                <<"openai">> ->
+                    [{<<"openai-privacy">>, <<"true">>} | Headers];
+                <<"antigravity">> ->
+                    [{<<"x-training-opt-out">>, <<"true">>} | Headers];
+                _ ->
+                    Headers
+            end;
+        _ ->
+            Headers
+    end.
+
+%% A05: Session ID masking — generate random session-id for Anthropic
+-spec apply_session_id([{binary(), binary()}], map()) -> [{binary(), binary()}].
+apply_session_id(Headers, Account) ->
+    Platform = maps:get(platform, Account, <<>>),
+    SessionMask = maps:get(<<"session_id_mask">>, maps:get(credentials, Account, #{}), false),
+    case Platform =:= <<"claude">> andalso SessionMask =:= true of
+        true ->
+            FakeSessionId = binary:encode_hex(crypto:strong_rand_bytes(16)),
+            [{<<"x-session-id">>, FakeSessionId} | Headers];
+        false ->
+            Headers
     end.

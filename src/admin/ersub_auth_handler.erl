@@ -113,8 +113,43 @@ get_oauth_config(<<"github">>) ->
                 scope => <<"read:user user:email">>
             }}
     end;
-get_oauth_config(_) ->
-    {error, not_configured}.
+get_oauth_config(<<"google">>) ->
+    ClientId = ersub_config_srv:get(auth_oauth_providers_google_client_id, undefined),
+    case ClientId of
+        undefined -> {error, not_configured};
+        _ ->
+            {ok, #{
+                client_id => to_bin(ClientId),
+                client_secret => to_bin(ersub_config_srv:get(auth_oauth_providers_google_client_secret, <<>>)),
+                auth_url => <<"https://accounts.google.com/o/oauth2/v2/auth">>,
+                token_url => <<"https://oauth2.googleapis.com/token">>,
+                user_url => <<"https://www.googleapis.com/oauth2/v2/userinfo">>,
+                redirect_uri => build_redirect_uri(<<"google">>),
+                scope => <<"openid email profile">>
+            }}
+    end;
+get_oauth_config(Provider) ->
+    %% Generic OIDC: read from config dynamically
+    Prefix = <<"auth_oauth_providers_", Provider/binary>>,
+    ClientId = ersub_config_srv:get(binary_to_atom(<<Prefix/binary, "_client_id">>), undefined),
+    case ClientId of
+        undefined -> {error, not_configured};
+        _ ->
+            {ok, #{
+                client_id => to_bin(ClientId),
+                client_secret => to_bin(ersub_config_srv:get(
+                    binary_to_atom(<<Prefix/binary, "_client_secret">>), <<>>)),
+                auth_url => to_bin(ersub_config_srv:get(
+                    binary_to_atom(<<Prefix/binary, "_auth_url">>), <<>>)),
+                token_url => to_bin(ersub_config_srv:get(
+                    binary_to_atom(<<Prefix/binary, "_token_url">>), <<>>)),
+                user_url => to_bin(ersub_config_srv:get(
+                    binary_to_atom(<<Prefix/binary, "_user_url">>), <<>>)),
+                redirect_uri => build_redirect_uri(Provider),
+                scope => to_bin(ersub_config_srv:get(
+                    binary_to_atom(<<Prefix/binary, "_scope">>), <<"openid email profile">>))
+            }}
+    end.
 
 exchange_oauth_code(Provider, Code) ->
     case get_oauth_config(Provider) of

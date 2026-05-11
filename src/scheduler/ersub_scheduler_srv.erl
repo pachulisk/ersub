@@ -101,8 +101,19 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
                             NewExcluded = Excluded#{AccountId => true},
                             do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches)
                     end;
+                {error, {http, Code2}} ->
+                    %% X04: Check custom retryable error codes from account credentials
+                    CustomCodes = maps:get(<<"retryable_error_codes">>,
+                        maps:get(credentials, Account, #{}), []),
+                    case lists:member(Code2, CustomCodes) of
+                        true ->
+                            ersub_account_srv:record_error(AccountId, Code2),
+                            NewExcluded2 = Excluded#{AccountId => true},
+                            do_failover(Req, ForwardFun, NewExcluded2, Attempt + 1, MaxSwitches);
+                        false ->
+                            {error, {http, Code2}}
+                    end;
                 {error, Reason} ->
-                    %% Non-retriable error
                     {error, Reason}
             end;
         {error, no_available_account} ->
@@ -137,6 +148,23 @@ select_by_score(Req) ->
 select_best_candidate_clips([], _Req) ->
     {error, no_available_account};
 select_best_candidate_clips(Candidates, _Req) ->
+    %% S03: Check if advanced scheduler is enabled (DB setting, 5s cache)
+    AdvancedEnabled = ersub_config_srv:get(advanced_scheduler_enabled, true),
+    case AdvancedEnabled of
+        false ->
+            %% Fallback: simple priority sort
+            Sorted = lists:sort(fun(A, B) ->
+                maps:get(priority, A, 100) =< maps:get(priority, B, 100)
+            end, Candidates),
+            case Sorted of
+                [Best | _] -> get_full_account(maps:get(id, Best));
+                [] -> {error, no_available_account}
+            end;
+        _ ->
+            select_via_clips(Candidates)
+    end.
+
+select_via_clips(Candidates) ->
     %% Score all candidates via CLIPS scheduling.clp rules
     Weights = #{
         priority => ersub_config_srv:get(scheduling_score_weights_priority, 1.0),

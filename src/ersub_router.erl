@@ -25,7 +25,10 @@ routes() ->
             {"/api/auth/[...]", ersub_auth_handler, []},
             {"/api/announcements/[...]", ersub_announcement_handler, []},
 
-            %% Health check (implemented)
+            %% Ops WebSocket
+            {"/api/ops/ws", ersub_ops_ws_handler, []},
+
+            %% Health check
             {"/health", ersub_health_handler, []},
 
             %% Static files (frontend)

@@ -61,12 +61,20 @@ extract_usage_from_json(#{<<"usage">> := U} = Json) when is_map(U) ->
         <<"flex">> -> flex;
         _ -> standard
     end,
+    %% Image size detection from response data
+    ImageSize = case maps:get(<<"data">>, Json, undefined) of
+        [#{<<"size">> := S} | _] -> S;
+        _ -> undefined
+    end,
     #{
         input_tokens => maps:get(<<"input_tokens">>, U, 0),
         output_tokens => maps:get(<<"output_tokens">>, U, 0),
         cache_read_tokens => maps:get(<<"cache_read_input_tokens">>, U, 0),
         cache_creation_tokens => maps:get(<<"cache_creation_input_tokens">>, U, 0),
-        service_tier => ServiceTier
+        cache_5m_tokens => maps:get(<<"cache_creation_5m_tokens">>, U, 0),
+        cache_1h_tokens => maps:get(<<"cache_creation_1h_tokens">>, U, 0),
+        service_tier => ServiceTier,
+        image_size => ImageSize
     };
 extract_usage_from_json(#{<<"usage">> := #{<<"prompt_tokens">> := PT,
                                            <<"completion_tokens">> := CT}}) ->

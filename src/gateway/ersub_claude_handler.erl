@@ -141,12 +141,33 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     %% For MVP, only handle non-streaming
     %% Streaming will be added in P2-01
 
-    Url = <<BaseUrl/binary, "/v1/messages">>,
-    Headers = [
+    AccountType = maps:get(account_type, Account, <<"api_key">>),
+    RequestModel = maps:get(<<"model">>, Parsed, <<>>),
+    Url = case AccountType of
+        <<"bedrock">> ->
+            BRegion = maps:get(<<"region">>, Creds, <<"us-east-1">>),
+            BModel = case RequestModel of <<>> -> <<"anthropic.claude-v2">>; M -> M end,
+            iolist_to_binary([<<"https://bedrock-runtime.">>, BRegion,
+                              <<".amazonaws.com/model/">>, BModel, <<"/invoke">>]);
+        _ ->
+            <<BaseUrl/binary, "/v1/messages">>
+    end,
+    BaseHeaders = [
         {<<"content-type">>, <<"application/json">>},
-        {<<"x-api-key">>, ApiKey},
         {<<"anthropic-version">>, <<"2023-06-01">>}
     ],
+    Headers = case AccountType of
+        <<"bedrock">> ->
+            AwsCreds = #{
+                access_key => maps:get(<<"access_key">>, Creds, <<>>),
+                secret_key => maps:get(<<"secret_key">>, Creds, <<>>),
+                region => maps:get(<<"region">>, Creds, <<"us-east-1">>),
+                service => <<"bedrock">>
+            },
+            ersub_aws_signer:sign_request(<<"POST">>, Url, BaseHeaders, OrigBody, AwsCreds);
+        _ ->
+            [{<<"x-api-key">>, ApiKey} | BaseHeaders]
+    end,
 
     case IsStream of
         true ->
