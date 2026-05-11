@@ -4,6 +4,8 @@
 -export([start_link/0]).
 -export([create_order/3, get_order/1, fulfill_order/2,
          redeem_code/2, apply_promo/2]).
+-export([request_refund/1, process_refund/1]).
+-export([generate_resume_token/1, verify_resume_token/1]).
 -export([init/1, handle_call/3, handle_cast/2]).
 
 -define(SERVER, ?MODULE).
@@ -37,6 +39,53 @@ redeem_code(UserId, Code) ->
 -spec apply_promo(integer(), binary()) -> {ok, map()} | {error, term()}.
 apply_promo(UserId, Code) ->
     gen_server:call(?SERVER, {promo, UserId, Code}).
+
+%% P02: Request a refund — transitions paid→refund_requested.
+-spec request_refund(integer()) -> ok | {error, term()}.
+request_refund(OrderId) ->
+    gen_server:call(?SERVER, {request_refund, OrderId}).
+
+%% P02: Process a refund — transitions refund_requested→refunding→refunded.
+-spec process_refund(integer()) -> ok | {error, term()}.
+process_refund(OrderId) ->
+    gen_server:call(?SERVER, {process_refund, OrderId}).
+
+%% P03: Generate a resume token for an order (HMAC-SHA256 signed).
+-spec generate_resume_token(integer()) -> {ok, binary()}.
+generate_resume_token(OrderId) ->
+    Timestamp = integer_to_binary(erlang:system_time(second)),
+    OrderIdBin = integer_to_binary(OrderId),
+    Payload = <<OrderIdBin/binary, ":", Timestamp/binary>>,
+    Secret = get_jwt_secret(),
+    Sig = crypto:mac(hmac, sha256, Secret, Payload),
+    SigHex = binary:encode_hex(Sig),
+    Token = <<Payload/binary, ":", SigHex/binary>>,
+    {ok, Token}.
+
+%% P03: Verify a resume token. Returns {ok, OrderId} or {error, Reason}.
+-spec verify_resume_token(binary()) -> {ok, integer()} | {error, term()}.
+verify_resume_token(Token) ->
+    case binary:split(Token, <<":">>, [global]) of
+        [OrderIdBin, Timestamp, SigHex] ->
+            Payload = <<OrderIdBin/binary, ":", Timestamp/binary>>,
+            Secret = get_jwt_secret(),
+            ExpectedSig = crypto:mac(hmac, sha256, Secret, Payload),
+            ExpectedHex = binary:encode_hex(ExpectedSig),
+            case crypto:hash_equals(ExpectedHex, SigHex) of
+                true ->
+                    %% Check expiry (1 hour)
+                    Now = erlang:system_time(second),
+                    TS = binary_to_integer(Timestamp),
+                    case Now - TS < 3600 of
+                        true -> {ok, binary_to_integer(OrderIdBin)};
+                        false -> {error, token_expired}
+                    end;
+                false ->
+                    {error, invalid_signature}
+            end;
+        _ ->
+            {error, invalid_token_format}
+    end.
 
 %%% gen_server callbacks
 
@@ -149,6 +198,98 @@ handle_call({promo, UserId, Code}, _From, State) ->
     end,
     {reply, Reply, State};
 
+%% P02: Request refund — paid→refund_requested (via CLIPS rules)
+handle_call({request_refund, OrderId}, _From, State) ->
+    Reply = case ersub_repo:query(
+        "SELECT id, status, amount_usd, user_id FROM payment_orders WHERE id = $1",
+        [OrderId])
+    of
+        {ok, _, [{_Id, Status, Amount, _UserId}]} ->
+            StatusBin = ensure_binary(Status),
+            AmtFloat = to_float(Amount),
+            %% Use CLIPS to evaluate refund transition
+            case ersub_clips_pool:evaluate_refund_transition(#{
+                order_id => OrderId,
+                current_status => StatusBin,
+                requested_action => <<"request_refund">>,
+                amount => AmtFloat
+            }) of
+                {ok, #{<<"allowed">> := true}} ->
+                    case ersub_repo:query(
+                        "UPDATE payment_orders SET status = 'refund_requested', "
+                        "updated_at = NOW() WHERE id = $1 AND status = 'paid' "
+                        "RETURNING id", [OrderId])
+                    of
+                        {ok, 1, _, [_]} -> ok;
+                        {ok, 0, _, []} -> {error, invalid_status_transition};
+                        {error, R} -> {error, R}
+                    end;
+                {ok, #{<<"allowed">> := false, <<"reason">> := Reason}} ->
+                    {error, {refund_denied, Reason}};
+                {ok, _} ->
+                    %% Fallback: allow if status is paid
+                    case StatusBin of
+                        <<"paid">> ->
+                            case ersub_repo:query(
+                                "UPDATE payment_orders SET status = 'refund_requested', "
+                                "updated_at = NOW() WHERE id = $1 AND status = 'paid' "
+                                "RETURNING id", [OrderId])
+                            of
+                                {ok, 1, _, [_]} -> ok;
+                                {ok, 0, _, []} -> {error, invalid_status_transition};
+                                {error, R} -> {error, R}
+                            end;
+                        _ -> {error, invalid_status_transition}
+                    end;
+                {error, ClipsErr} ->
+                    logger:error("CLIPS refund evaluation failed: ~p", [ClipsErr]),
+                    {error, {clips_error, ClipsErr}}
+            end;
+        {ok, _, []} ->
+            {error, not_found};
+        {error, R} ->
+            {error, R}
+    end,
+    {reply, Reply, State};
+
+%% P02: Process refund — refund_requested→refunding→refunded (via CLIPS rules)
+handle_call({process_refund, OrderId}, _From, State) ->
+    Reply = case ersub_repo:query(
+        "SELECT id, status, amount_usd, user_id FROM payment_orders WHERE id = $1",
+        [OrderId])
+    of
+        {ok, _, [{_Id, Status, Amount, UserId}]} ->
+            StatusBin = ensure_binary(Status),
+            AmtFloat = to_float(Amount),
+            case ersub_clips_pool:evaluate_refund_transition(#{
+                order_id => OrderId,
+                current_status => StatusBin,
+                requested_action => <<"process_refund">>,
+                amount => AmtFloat
+            }) of
+                {ok, #{<<"allowed">> := true}} ->
+                    do_process_refund(OrderId, UserId, AmtFloat);
+                {ok, #{<<"allowed">> := false, <<"reason">> := Reason}} ->
+                    {error, {refund_denied, Reason}};
+                {ok, _} ->
+                    %% Fallback: allow if status is refund_requested
+                    case StatusBin of
+                        <<"refund_requested">> ->
+                            do_process_refund(OrderId, UserId, AmtFloat);
+                        _ ->
+                            {error, invalid_status_transition}
+                    end;
+                {error, ClipsErr} ->
+                    logger:error("CLIPS refund evaluation failed: ~p", [ClipsErr]),
+                    {error, {clips_error, ClipsErr}}
+            end;
+        {ok, _, []} ->
+            {error, not_found};
+        {error, R} ->
+            {error, R}
+    end,
+    {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown}, State}.
 
@@ -164,3 +305,43 @@ to_float(V) when is_binary(V) ->
 to_float(V) when is_float(V) -> V;
 to_float(V) when is_integer(V) -> V * 1.0;
 to_float(_) -> 0.0.
+
+do_process_refund(OrderId, UserId, AmtFloat) ->
+    %% Transition: refund_requested → refunding
+    case ersub_repo:query(
+        "UPDATE payment_orders SET status = 'refunding', updated_at = NOW() "
+        "WHERE id = $1 AND status = 'refund_requested' RETURNING id",
+        [OrderId])
+    of
+        {ok, 1, _, [_]} ->
+            %% Credit balance back to user
+            ersub_repo:update_user_balance(UserId, AmtFloat),
+            ersub_billing_srv:sync_balance(UserId),
+            %% Transition: refunding → refunded
+            case ersub_repo:query(
+                "UPDATE payment_orders SET status = 'refunded', updated_at = NOW() "
+                "WHERE id = $1 AND status = 'refunding' RETURNING id",
+                [OrderId])
+            of
+                {ok, 1, _, [_]} ->
+                    logger:info("Refund completed: order=~p user=~p amount=~p",
+                                [OrderId, UserId, AmtFloat]),
+                    ok;
+                {ok, 0, _, []} -> {error, refund_finalize_failed};
+                {error, R} -> {error, R}
+            end;
+        {ok, 0, _, []} -> {error, invalid_status_transition};
+        {error, R} -> {error, R}
+    end.
+
+get_jwt_secret() ->
+    case ersub_config_srv:get(auth_jwt_secret, <<>>) of
+        <<>> -> <<"ersub-default-jwt-secret-change-me">>;
+        S when is_list(S) -> list_to_binary(S);
+        S when is_binary(S) -> S
+    end.
+
+ensure_binary(V) when is_binary(V) -> V;
+ensure_binary(V) when is_list(V) -> list_to_binary(V);
+ensure_binary(V) when is_atom(V) -> atom_to_binary(V);
+ensure_binary(_) -> <<>>.

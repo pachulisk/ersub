@@ -3,7 +3,10 @@
 
 -export([start_link/0]).
 -export([select_account/1, select_with_failover/2]).
+-export([get_metrics/0]).
 -export([init/1, handle_call/3, handle_cast/2]).
+
+-define(METRICS_TABLE, ersub_scheduler_metrics).
 
 -define(SERVER, ?MODULE).
 
@@ -12,10 +15,17 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%% Return runtime scheduler metrics.
+-spec get_metrics() -> map().
+get_metrics() ->
+    Keys = [select_total, sticky_hit, lb_select, account_switch],
+    maps:from_list([{K, read_counter(K)} || K <- Keys]).
+
 %% Select the best account for a request.
 %% Checks sticky session first, then scores candidates.
 -spec select_account(map()) -> {ok, map()} | {error, no_available_account}.
 select_account(Req) ->
+    bump_counter(select_total),
     #{user_id := UserId} = Req,
     PrevRespId = maps:get(previous_response_id, Req, <<>>),
     SessionHash = maps:get(session_hash, Req, <<>>),
@@ -25,7 +35,9 @@ select_account(Req) ->
     case PrevRespId =/= <<>> andalso ersub_session_srv:lookup(UserId, PrevRespId) of
         {ok, AccountId0} when not is_map_key(AccountId0, ExcludedIds) ->
             case get_account_if_schedulable(AccountId0) of
-                {ok, Account} -> {ok, Account};
+                {ok, Account} ->
+                    bump_counter(sticky_hit),
+                    {ok, Account};
                 _ -> select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req)
             end;
         _ ->
@@ -37,7 +49,9 @@ select_by_session_or_score(UserId, SessionHash, ExcludedIds, Req) ->
     case SessionHash =/= <<>> andalso ersub_session_srv:lookup(UserId, SessionHash) of
         {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
             case get_account_if_schedulable(AccountId) of
-                {ok, Account} -> {ok, Account};
+                {ok, Account} ->
+                    bump_counter(sticky_hit),
+                    {ok, Account};
                 _ -> select_by_score(Req)
             end;
         _ ->
@@ -54,6 +68,10 @@ select_with_failover(Req, ForwardFun) ->
 %%% gen_server callbacks
 
 init([]) ->
+    ets:new(?METRICS_TABLE, [named_table, public, set, {write_concurrency, true}]),
+    lists:foreach(fun(K) ->
+        ets:insert(?METRICS_TABLE, {K, 0})
+    end, [select_total, sticky_hit, lb_select, account_switch]),
     logger:info("Scheduler service started"),
     {ok, #{}}.
 
@@ -96,6 +114,7 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
                             NewExcluded = Excluded#{{pool_attempt, AccountId} => PoolAttempt + 1},
                             do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
                         false ->
+                            bump_counter(account_switch),
                             logger:warning("Account ~p returned ~p, switching (attempt ~p/~p)",
                                            [AccountId, Code, Attempt + 1, MaxSwitches]),
                             NewExcluded = Excluded#{AccountId => true},
@@ -122,6 +141,7 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
 
 %% Layer 2: Score-based selection via CLIPS scheduling.clp rules
 select_by_score(Req) ->
+    bump_counter(lb_select),
     Platform = maps:get(platform, Req, undefined),
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
     case ersub_platform_sup:list_accounts() of
@@ -234,3 +254,13 @@ pick_weighted_random(Candidates) ->
     %% Simple: uniform random from top-k
     Idx = rand:uniform(length(Candidates)),
     lists:nth(Idx, Candidates).
+
+bump_counter(Key) ->
+    try ets:update_counter(?METRICS_TABLE, Key, {2, 1})
+    catch error:badarg -> 0
+    end.
+
+read_counter(Key) ->
+    try ets:lookup_element(?METRICS_TABLE, Key, 2)
+    catch error:badarg -> 0
+    end.

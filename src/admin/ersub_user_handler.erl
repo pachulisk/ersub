@@ -106,6 +106,68 @@ handle(<<"GET">>, [<<"usage">>], Req0, State, UserId) ->
             {ok, Req, State}
     end;
 
+%% GET /api/user/attributes
+handle(<<"GET">>, [<<"attributes">>], Req0, State, UserId) ->
+    case ersub_repo:query(
+        "SELECT d.attribute_key, d.attribute_type, d.default_value, "
+        "COALESCE(v.attribute_value, d.default_value) AS value "
+        "FROM user_attribute_definitions d "
+        "LEFT JOIN user_attribute_values v "
+        "ON d.attribute_key = v.attribute_key AND v.user_id = $1 "
+        "ORDER BY d.attribute_key",
+        [UserId])
+    of
+        {ok, _, Rows} ->
+            Attrs = [#{key => K, type => T, default => D, value => V}
+                     || {K, T, D, V} <- Rows],
+            Req = reply_json(200, #{data => Attrs}, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            Req = reply_json(500, #{error => fmt_err(Reason)}, Req0),
+            {ok, Req, State}
+    end;
+
+%% PUT /api/user/attributes
+handle(<<"PUT">>, [<<"attributes">>], Req0, State, UserId) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Attrs = jsx:decode(Body, [return_maps]),
+    %% Attrs is a map of key→value
+    Results = maps:fold(fun(Key, Value, Acc) ->
+        case ersub_repo:query(
+            "SELECT attribute_key FROM user_attribute_definitions WHERE attribute_key = $1",
+            [Key])
+        of
+            {ok, _, [_]} ->
+                %% Definition exists, upsert value
+                case ersub_repo:query(
+                    "INSERT INTO user_attribute_values (user_id, attribute_key, attribute_value) "
+                    "VALUES ($1, $2, $3) "
+                    "ON CONFLICT (user_id, attribute_key) DO UPDATE "
+                    "SET attribute_value = $3, updated_at = NOW()",
+                    [UserId, Key, Value])
+                of
+                    {ok, _, _} -> Acc;
+                    {ok, _} -> Acc;
+                    {error, R} -> [{Key, R} | Acc]
+                end;
+            {ok, _, []} ->
+                [{Key, unknown_attribute} | Acc];
+            {error, R} ->
+                [{Key, R} | Acc]
+        end
+    end, [], Attrs),
+    case Results of
+        [] ->
+            Req = reply_json(200, #{success => true}, Req1),
+            {ok, Req, State};
+        Errors ->
+            ErrMap = maps:from_list([{K, iolist_to_binary(io_lib:format("~p", [R]))}
+                                     || {K, R} <- Errors]),
+            Req = reply_json(400, #{error => #{message => <<"Some attributes failed">>,
+                                               details => ErrMap}}, Req1),
+            {ok, Req, State}
+    end;
+
 handle(_, _, Req0, State, _) ->
     Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
     {ok, Req, State}.

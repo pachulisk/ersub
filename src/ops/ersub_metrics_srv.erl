@@ -53,25 +53,36 @@ schedule_aggregation() ->
     erlang:send_after(?AGGREGATION_INTERVAL_MS, self(), aggregate).
 
 do_aggregation() ->
-    %% Aggregate per-model metrics for the last 5 minutes
-    case ersub_repo:squery(
+    %% O02: Aggregate per-model metrics for 3 granularities: 5min, 1h, 24h
+    %% date_trunc accepts unit names: minute, hour, day
+    %% WindowSize is the INTERVAL for window_end offset
+    %% Lookback is the INTERVAL for the WHERE clause
+    aggregate_window(<<"5min">>, <<"minute">>, <<"5 minutes">>, <<"10 minutes">>),
+    aggregate_window(<<"1hour">>, <<"hour">>, <<"1 hour">>, <<"2 hours">>),
+    aggregate_window(<<"24hour">>, <<"day">>, <<"1 day">>, <<"25 hours">>).
+
+aggregate_window(Granularity, TruncUnit, WindowSize, Lookback) ->
+    Query = iolist_to_binary([
         "INSERT INTO metrics_aggregated "
         "(dimension_type, dimension_id, window_start, window_end, granularity, "
         "request_count, error_count, total_tokens, total_cost_usd) "
         "SELECT 'model', requested_model, "
-        "date_trunc('hour', created_at), date_trunc('hour', created_at) + INTERVAL '1 hour', "
-        "'1hour', COUNT(*), "
+        "date_trunc('", TruncUnit, "', created_at), "
+        "date_trunc('", TruncUnit, "', created_at) + INTERVAL '", WindowSize, "', "
+        "'", Granularity, "', COUNT(*), "
         "COUNT(*) FILTER (WHERE actual_cost = 0), "
         "COALESCE(SUM(input_tokens + output_tokens), 0), "
         "COALESCE(SUM(actual_cost::numeric), 0) "
         "FROM usage_logs "
-        "WHERE created_at > NOW() - INTERVAL '10 minutes' "
-        "GROUP BY requested_model, date_trunc('hour', created_at) "
+        "WHERE created_at > NOW() - INTERVAL '", Lookback, "' "
+        "GROUP BY requested_model, date_trunc('", TruncUnit, "', created_at) "
         "ON CONFLICT DO NOTHING"
-    ) of
+    ]),
+    case ersub_repo:squery(binary_to_list(Query)) of
         {ok, _, _} -> ok;
         {error, Reason} ->
-            logger:warning("Metrics aggregation failed: ~p", [Reason])
+            logger:warning("Metrics aggregation (~s) failed: ~p",
+                           [Granularity, Reason])
     end.
 
 acquire_advisory_lock(LockId) ->

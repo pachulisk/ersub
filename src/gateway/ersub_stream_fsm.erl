@@ -182,7 +182,19 @@ forward_and_accumulate([Event | Rest], Data) ->
     end,
     %% Try to extract token usage from the event
     Data3 = try_accumulate_tokens(Event, Data2),
+    %% G05: Inject x-ersub-tokens SSE comment with accumulated counts
+    maybe_inject_token_comment(Data3),
     forward_and_accumulate(Rest, Data3).
+
+maybe_inject_token_comment(#data{caller = Caller, accumulated = Acc}) ->
+    TokenInfo = jsx:encode(#{
+        input_tokens => maps:get(input_tokens, Acc, 0),
+        output_tokens => maps:get(output_tokens, Acc, 0),
+        cache_read_tokens => maps:get(cache_read_tokens, Acc, 0),
+        cache_creation_tokens => maps:get(cache_creation_tokens, Acc, 0)
+    }),
+    Comment = <<": x-ersub-tokens ", TokenInfo/binary, "\n\n">>,
+    Caller ! {stream_chunk, self(), Comment}.
 
 try_accumulate_tokens(Event, Data) ->
     %% Parse SSE data line for token usage

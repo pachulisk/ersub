@@ -13,6 +13,7 @@ routes() ->
             {"/openai/v1/responses", ersub_openai_responses_handler, []},
             {"/openai/v1/realtime", ersub_openai_ws_handler, []},
             {"/openai/v1/images/generations", ersub_openai_images_handler, []},
+            {"/openai/v1/images/edits", ersub_openai_images_handler, []},
             {"/gemini/v1beta/[...]", ersub_gemini_handler, []},
             {"/antigravity/v1/messages", ersub_antigravity_handler, []},
 
@@ -27,6 +28,9 @@ routes() ->
 
             %% Ops WebSocket
             {"/api/ops/ws", ersub_ops_ws_handler, []},
+
+            %% Custom Markdown pages
+            {"/pages/:slug", ersub_page_handler, []},
 
             %% Health check
             {"/health", ersub_health_handler, []},

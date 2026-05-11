@@ -175,6 +175,57 @@ handle_call({evaluate_error, ErrorData}, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
+%% === 7. MODERATION (moderation.clp) ===
+handle_call({evaluate_moderation, ModerationData}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = build_moderation_facts(ModerationData),
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"moderation-result">>],
+            case Results of
+                [R | _] -> {reply, {ok, R}, S3};
+                [] -> {reply, {ok, #{<<"action">> => <<"pass">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
+%% === 8. REFUND STATE TRANSITION (refund.clp) ===
+handle_call({evaluate_refund, RefundData}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = build_refund_facts(RefundData),
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Updates = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"refund-result">>],
+            case Updates of
+                [U | _] -> {reply, {ok, U}, S3};
+                [] -> {reply, {ok, #{<<"allowed">> => false, <<"reason">> => <<"no_rule_matched">>}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
+%% === 9. MESSAGES DISPATCH (dispatch.clp) ===
+handle_call({evaluate_dispatch, DispatchData}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = build_dispatch_facts(DispatchData),
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"dispatch-result">>],
+            case Results of
+                [R | _] -> {reply, {ok, R}, S3};
+                [] -> {reply, {ok, #{<<"target_model">> => maps:get(model, DispatchData, <<>>)}}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),
@@ -391,3 +442,46 @@ truncate(Bin, MaxLen) when byte_size(Bin) > MaxLen ->
     binary:part(Bin, 0, MaxLen);
 truncate(Bin, _) ->
     Bin.
+
+build_moderation_facts(M) ->
+    Categories = maps:get(categories, M, #{}),
+    Thresholds = maps:get(thresholds, M, #{}),
+    CatFacts = maps:fold(fun(Cat, Score, Acc) ->
+        Threshold = maps:get(Cat, Thresholds, 0.5),
+        Fact = iolist_to_binary(io_lib:format(
+            "(moderation-category (name \"~s\") (score ~.6f) (threshold ~.6f))",
+            [Cat, Score, Threshold])),
+        [Fact | Acc]
+    end, [], Categories),
+    Content = maps:get(content, M, <<>>),
+    ContentFact = iolist_to_binary(io_lib:format(
+        "(moderation-request (content-hash \"~s\"))",
+        [truncate(Content, 64)])),
+    [ContentFact | CatFacts].
+
+build_refund_facts(R) ->
+    OrderId = maps:get(order_id, R, 0),
+    CurrentStatus = maps:get(current_status, R, <<"paid">>),
+    RequestedAction = maps:get(requested_action, R, <<"refund">>),
+    Amount = maps:get(amount, R, 0.0),
+    [iolist_to_binary(io_lib:format(
+        "(refund-request (order-id ~p) (current-status \"~s\") "
+        "(requested-action \"~s\") (amount ~.2f))",
+        [OrderId, CurrentStatus, RequestedAction, Amount]))].
+
+build_dispatch_facts(D) ->
+    Model = maps:get(model, D, <<>>),
+    SourcePlatform = maps:get(source_platform, D, <<>>),
+    TargetPlatform = maps:get(target_platform, D, <<>>),
+    ModelConfig = maps:get(model_config, D, #{}),
+    RequestFact = iolist_to_binary(io_lib:format(
+        "(dispatch-request (model \"~s\") (source-platform \"~s\") "
+        "(target-platform \"~s\"))",
+        [Model, SourcePlatform, TargetPlatform])),
+    ConfigFacts = maps:fold(fun(FromModel, ToModel, Acc) ->
+        Fact = iolist_to_binary(io_lib:format(
+            "(dispatch-mapping (from-model \"~s\") (to-model \"~s\"))",
+            [FromModel, ToModel])),
+        [Fact | Acc]
+    end, [], ModelConfig),
+    [RequestFact | ConfigFacts].

@@ -6,6 +6,9 @@
 -export([select_account/2, calculate_billing/1, check_quota/1,
          evaluate_account_status/1, resolve_model_route/1,
          evaluate_error_passthrough/1]).
+%% Extended decision APIs
+-export([evaluate_moderation/1, evaluate_refund_transition/1,
+         evaluate_messages_dispatch/1]).
 
 -define(POOL, ersub_clips_pool).
 
@@ -74,4 +77,25 @@ resolve_model_route(RouteReq) ->
 evaluate_error_passthrough(ErrorData) ->
     with_worker(fun(W) ->
         gen_server:call(W, {evaluate_error, ErrorData}, 10000)
+    end).
+
+%% Evaluate moderation thresholds via moderation.clp rules.
+-spec evaluate_moderation(map()) -> {ok, map()} | {error, term()}.
+evaluate_moderation(ModerationData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_moderation, ModerationData}, 10000)
+    end).
+
+%% Evaluate refund state transition via refund.clp rules.
+-spec evaluate_refund_transition(map()) -> {ok, map()} | {error, term()}.
+evaluate_refund_transition(RefundData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_refund, RefundData}, 10000)
+    end).
+
+%% Evaluate messages dispatch cross-platform model mapping via dispatch.clp rules.
+-spec evaluate_messages_dispatch(map()) -> {ok, map()} | {error, term()}.
+evaluate_messages_dispatch(DispatchData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {evaluate_dispatch, DispatchData}, 10000)
     end).

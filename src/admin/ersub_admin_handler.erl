@@ -184,6 +184,61 @@ handle(<<"POST">>, [<<"clips">>, <<"reload">>], Req0, State, _Claims) ->
     ersub_clips_pool:reload_rules(),
     reply_ok(#{success => true}, Req0, State);
 
+%% === Data Export ===
+
+%% GET /api/admin/export/usage
+handle(<<"GET">>, [<<"export">>, <<"usage">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT request_id, user_id, requested_model, input_tokens, output_tokens, "
+        "actual_cost, stream, created_at FROM usage_logs "
+        "ORDER BY created_at DESC LIMIT 10000"
+    ) of
+        {ok, _, Rows} ->
+            Header = <<"request_id,user_id,model,input_tokens,output_tokens,cost,stream,created_at\r\n">>,
+            CsvRows = lists:map(fun({RId, UID, Model, IT, OT, Cost, Stream, CA}) ->
+                iolist_to_binary([
+                    csv_field(RId), <<",">>, csv_field(UID), <<",">>,
+                    csv_field(Model), <<",">>, csv_field(IT), <<",">>,
+                    csv_field(OT), <<",">>, csv_field(Cost), <<",">>,
+                    csv_field(Stream), <<",">>, csv_field(CA), <<"\r\n">>
+                ])
+            end, Rows),
+            CsvBody = iolist_to_binary([Header | CsvRows]),
+            Req = cowboy_req:reply(200,
+                #{<<"content-type">> => <<"text/csv">>,
+                  <<"content-disposition">> => <<"attachment; filename=\"usage_export.csv\"">>},
+                CsvBody, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
+%% GET /api/admin/export/users
+handle(<<"GET">>, [<<"export">>, <<"users">>], Req0, State, _Claims) ->
+    case ersub_repo:squery(
+        "SELECT id, email, role, balance_usd, max_concurrency, is_banned, "
+        "created_at FROM users WHERE deleted_at IS NULL ORDER BY id"
+    ) of
+        {ok, _, Rows} ->
+            Header = <<"id,email,role,balance_usd,max_concurrency,is_banned,created_at\r\n">>,
+            CsvRows = lists:map(fun({Id, E, R, B, MC, IB, CA}) ->
+                iolist_to_binary([
+                    csv_field(Id), <<",">>, csv_field(E), <<",">>,
+                    csv_field(R), <<",">>, csv_field(B), <<",">>,
+                    csv_field(MC), <<",">>, csv_field(IB), <<",">>,
+                    csv_field(CA), <<"\r\n">>
+                ])
+            end, Rows),
+            CsvBody = iolist_to_binary([Header | CsvRows]),
+            Req = cowboy_req:reply(200,
+                #{<<"content-type">> => <<"text/csv">>,
+                  <<"content-disposition">> => <<"attachment; filename=\"users_export.csv\"">>},
+                CsvBody, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            reply_err(500, Reason, Req0, State)
+    end;
+
 handle(_, _, Req0, State, _) ->
     Req = reply_json(404, #{error => #{message => <<"Not found">>}}, Req0),
     {ok, Req, State}.
@@ -221,3 +276,20 @@ auth_msg(missing_token) -> <<"Missing Authorization header">>;
 auth_msg(not_admin) -> <<"Admin role required">>;
 auth_msg(token_expired) -> <<"Token expired">>;
 auth_msg(_) -> <<"Authentication failed">>.
+
+csv_field(null) -> <<>>;
+csv_field(undefined) -> <<>>;
+csv_field(V) when is_binary(V) ->
+    %% Escape double quotes and wrap in quotes if contains comma/quote/newline
+    case binary:match(V, [<<",">>, <<"\"">>, <<"\n">>, <<"\r">>]) of
+        nomatch -> V;
+        _ ->
+            Escaped = binary:replace(V, <<"\"">>, <<"\"\"">>, [global]),
+            <<"\"", Escaped/binary, "\"">>
+    end;
+csv_field(V) when is_integer(V) -> integer_to_binary(V);
+csv_field(V) when is_float(V) -> float_to_binary(V, [{decimals, 6}, compact]);
+csv_field(true) -> <<"true">>;
+csv_field(false) -> <<"false">>;
+csv_field(V) when is_atom(V) -> atom_to_binary(V);
+csv_field(V) -> iolist_to_binary(io_lib:format("~p", [V])).

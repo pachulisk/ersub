@@ -6,6 +6,8 @@
 start(_StartType, _StartArgs) ->
     ersub_auth_middleware:init_cache(),
     ersub_idempotency:init_cache(),
+    ersub_scheduler_metrics:init(),
+    ersub_image_limiter:init(),
     {ok, Pid} = ersub_sup:start_link(),
     %% Post-supervisor setup
     ersub_setup:check_and_run(),

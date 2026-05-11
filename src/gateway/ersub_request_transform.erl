@@ -3,7 +3,8 @@
 -export([transform_claude_request/2, build_upstream_headers/2,
          resolve_model_mapping/2, match_wildcard/2,
          resolve_model_chain/3,
-         apply_privacy_headers/2, apply_session_id/2]).
+         apply_privacy_headers/2, apply_session_id/2,
+         apply_messages_dispatch/2]).
 
 %% Transform a Claude API request body before forwarding upstream.
 %% Handles model passthrough, system prompt preservation, metadata stripping.
@@ -136,4 +137,64 @@ apply_session_id(Headers, Account) ->
             [{<<"x-session-id">>, FakeSessionId} | Headers];
         false ->
             Headers
+    end.
+
+%% X02: Cross-platform model mapping via messages_dispatch.
+%% Reads group's messages_dispatch_model_config from DB/config.
+%% Maps model families: Claude opus->GPT-5.4, sonnet->GPT-5.3, haiku->GPT-5.4-mini (and reverse).
+-spec apply_messages_dispatch(binary(), map()) -> {binary(), binary()}.
+apply_messages_dispatch(Model, GroupConfig) ->
+    ModelConfig = maps:get(<<"messages_dispatch_model_config">>, GroupConfig,
+                   maps:get(messages_dispatch_model_config, GroupConfig, #{})),
+    TargetPlatform = maps:get(<<"target_platform">>, GroupConfig,
+                      maps:get(target_platform, GroupConfig, <<>>)),
+    SourcePlatform = maps:get(<<"source_platform">>, GroupConfig,
+                      maps:get(source_platform, GroupConfig, <<>>)),
+    %% Use CLIPS dispatch rules for model mapping decisions
+    case ersub_clips_pool:evaluate_messages_dispatch(#{
+        model => Model,
+        source_platform => SourcePlatform,
+        target_platform => TargetPlatform,
+        model_config => ModelConfig
+    }) of
+        {ok, #{<<"target_model">> := TargetModel}} when TargetModel =/= <<>> ->
+            {TargetModel, TargetPlatform};
+        {ok, _} ->
+            %% Fallback: use built-in family mapping
+            dispatch_model_family(Model, ModelConfig, TargetPlatform);
+        {error, _} ->
+            dispatch_model_family(Model, ModelConfig, TargetPlatform)
+    end.
+
+dispatch_model_family(Model, ModelConfig, TargetPlatform) ->
+    %% Check explicit config first
+    case maps:get(Model, ModelConfig, undefined) of
+        undefined ->
+            %% Built-in family mapping
+            Mapped = map_model_family(Model),
+            {Mapped, TargetPlatform};
+        ExplicitTarget ->
+            {ExplicitTarget, TargetPlatform}
+    end.
+
+map_model_family(Model) ->
+    %% Default cross-platform model family mappings
+    Families = [
+        %% Claude → OpenAI
+        {<<"opus">>, <<"gpt-5.4">>},
+        {<<"sonnet">>, <<"gpt-5.3">>},
+        {<<"haiku">>, <<"gpt-5.4-mini">>},
+        %% OpenAI → Claude (reverse)
+        {<<"gpt-5.4-mini">>, <<"claude-haiku">>},
+        {<<"gpt-5.4">>, <<"claude-opus">>},
+        {<<"gpt-5.3">>, <<"claude-sonnet">>}
+    ],
+    match_model_family(Model, Families).
+
+match_model_family(Model, []) ->
+    Model;
+match_model_family(Model, [{Pattern, Target} | Rest]) ->
+    case binary:match(Model, Pattern) of
+        nomatch -> match_model_family(Model, Rest);
+        _ -> Target
     end.

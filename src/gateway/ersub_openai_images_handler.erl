@@ -62,7 +62,11 @@ forward(Req0, State, Account, Body, AuthCtx) ->
         B when B =:= null; B =:= undefined; B =:= <<>> -> <<"https://api.openai.com">>;
         U -> U
     end,
-    Url = <<BaseUrl/binary, "/v1/images/generations">>,
+    UpstreamPath = case cowboy_req:path(Req0) of
+        <<"/openai/v1/images/edits", _/binary>> -> <<"/v1/images/edits">>;
+        _ -> <<"/v1/images/generations">>
+    end,
+    Url = <<BaseUrl/binary, UpstreamPath/binary>>,
     Headers = [{<<"content-type">>, <<"application/json">>},
                {<<"authorization">>, <<"Bearer ", ApiKey/binary>>}],
     case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}, 120000) of
