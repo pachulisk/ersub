@@ -110,9 +110,12 @@ static void output_results(Environment *env) {
 static int load_rules(Environment *env, const char *dir) {
     char path[MAX_PATH_LEN];
     const char *files[] = {
-        "core.clp", "scheduling.clp", "billing.clp",
+        "core.clp", "platform_config.clp", "embedded_pricing.clp",
+        "scheduling.clp", "billing.clp",
         "quota.clp", "account_status.clp", "model_routing.clp",
-        "error_passthrough.clp", NULL
+        "error_passthrough.clp", "failover.clp", "identity_adoption.clp",
+        "pool_strategy.clp", "subscription.clp", "channel_filter.clp",
+        "budget_window.clp", NULL
     };
 
     for (int i = 0; files[i] != NULL; i++) {

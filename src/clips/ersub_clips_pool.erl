@@ -9,6 +9,8 @@
 %% Extended decision APIs
 -export([evaluate_moderation/1, evaluate_refund_transition/1,
          evaluate_messages_dispatch/1]).
+%% Configuration query APIs
+-export([get_platform_config/1, check_retriable/1]).
 %% Channel filter API
 -export([filter_channels/1]).
 %% Subscription validation API
@@ -117,3 +119,20 @@ evaluate_subscription(SubData) ->
     with_worker(fun(W) ->
         gen_server:call(W, {evaluate_subscription, SubData}, 10000)
     end).
+
+%% Get platform configuration from CLIPS facts.
+-spec get_platform_config(binary()) -> {ok, map()} | {error, term()}.
+get_platform_config(Platform) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {get_platform_config, Platform}, 5000)
+    end).
+
+%% Check if an HTTP error code is retriable via CLIPS rules.
+-spec check_retriable(integer()) -> boolean().
+check_retriable(Code) ->
+    case with_worker(fun(W) ->
+        gen_server:call(W, {check_retriable, Code}, 5000)
+    end) of
+        {ok, true} -> true;
+        _ -> false
+    end.

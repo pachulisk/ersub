@@ -68,10 +68,14 @@ select_with_failover(Req, ForwardFun) ->
 %%% gen_server callbacks
 
 init([]) ->
-    ets:new(?METRICS_TABLE, [named_table, public, set, {write_concurrency, true}]),
-    lists:foreach(fun(K) ->
-        ets:insert(?METRICS_TABLE, {K, 0})
-    end, [select_total, sticky_hit, lb_select, account_switch]),
+    case ets:info(?METRICS_TABLE) of
+        undefined ->
+            ets:new(?METRICS_TABLE, [named_table, public, set, {write_concurrency, true}]),
+            lists:foreach(fun(K) ->
+                ets:insert(?METRICS_TABLE, {K, 0})
+            end, [select_total, sticky_hit, lb_select, account_switch]);
+        _ -> ok
+    end,
     logger:info("Scheduler service started"),
     {ok, #{}}.
 
@@ -101,36 +105,34 @@ do_failover(Req, ForwardFun, Excluded, Attempt, MaxSwitches) ->
                     end,
                     ersub_account_srv:record_success(AccountId, 0),
                     {ok, Result};
-                {error, {http, Code}} when Code =:= 429; Code =:= 502; Code =:= 503; Code =:= 529 ->
-                    ersub_account_srv:record_error(AccountId, Code),
-                    %% pool_mode: retry same account before switching
-                    PoolMode = maps:get(pool_mode, Account, false),
-                    PoolRetries = maps:get(pool_retry_count, Account, 3),
-                    PoolAttempt = maps:get({pool_attempt, AccountId}, Excluded, 0),
-                    case PoolMode =:= true andalso PoolAttempt < PoolRetries of
-                        true ->
-                            logger:warning("Account ~p pool_mode retry ~p/~p (code ~p)",
-                                           [AccountId, PoolAttempt + 1, PoolRetries, Code]),
-                            NewExcluded = Excluded#{{pool_attempt, AccountId} => PoolAttempt + 1},
-                            do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
-                        false ->
-                            bump_counter(account_switch),
-                            logger:warning("Account ~p returned ~p, switching (attempt ~p/~p)",
-                                           [AccountId, Code, Attempt + 1, MaxSwitches]),
-                            NewExcluded = Excluded#{AccountId => true},
-                            do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches)
-                    end;
-                {error, {http, Code2}} ->
-                    %% X04: Check custom retryable error codes from account credentials
+                {error, {http, Code}} ->
+                    %% CL02: Check CLIPS retriable-code rules (replaces hardcoded 429/502/503/529)
+                    %% Also covers X04: custom retryable codes from account credentials
                     CustomCodes = maps:get(<<"retryable_error_codes">>,
                         maps:get(credentials, Account, #{}), []),
-                    case lists:member(Code2, CustomCodes) of
+                    IsRetriable = ersub_clips_pool:check_retriable(Code)
+                        orelse lists:member(Code, CustomCodes),
+                    case IsRetriable of
                         true ->
-                            ersub_account_srv:record_error(AccountId, Code2),
-                            NewExcluded2 = Excluded#{AccountId => true},
-                            do_failover(Req, ForwardFun, NewExcluded2, Attempt + 1, MaxSwitches);
+                            ersub_account_srv:record_error(AccountId, Code),
+                            PoolMode = maps:get(pool_mode, Account, false),
+                            PoolRetries = maps:get(pool_retry_count, Account, 3),
+                            PoolAttempt = maps:get({pool_attempt, AccountId}, Excluded, 0),
+                            case PoolMode =:= true andalso PoolAttempt < PoolRetries of
+                                true ->
+                                    logger:warning("Account ~p pool_mode retry ~p/~p (code ~p)",
+                                                   [AccountId, PoolAttempt + 1, PoolRetries, Code]),
+                                    NewExcluded = Excluded#{{pool_attempt, AccountId} => PoolAttempt + 1},
+                                    do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches);
+                                false ->
+                                    bump_counter(account_switch),
+                                    logger:warning("Account ~p returned ~p, switching (attempt ~p/~p)",
+                                                   [AccountId, Code, Attempt + 1, MaxSwitches]),
+                                    NewExcluded = Excluded#{AccountId => true},
+                                    do_failover(Req, ForwardFun, NewExcluded, Attempt + 1, MaxSwitches)
+                            end;
                         false ->
-                            {error, {http, Code2}}
+                            {error, {http, Code}}
                     end;
                 {error, Reason} ->
                     {error, Reason}

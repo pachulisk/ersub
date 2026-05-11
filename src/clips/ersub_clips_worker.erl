@@ -340,6 +340,40 @@ handle_call({filter_channels, Candidates}, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
+%% === 13. PLATFORM CONFIG LOOKUP ===
+handle_call({get_platform_config, Platform}, _From, #{port := Port} = State) ->
+    %% Query platform-config deffacts (loaded at startup, no assert needed — just run)
+    %% deffacts are persistent across retract_all, so we can query them directly
+    case run_and_collect(Port, State) of
+        {ok, AllFacts, S1} ->
+            Configs = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"platform-config">>,
+                       maps:get(<<"platform">>, F, <<>>) =:= Platform],
+            case Configs of
+                [C | _] -> {reply, {ok, C}, S1};
+                [] -> {reply, {error, not_found}, S1}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end;
+
+%% === 14. CHECK RETRIABLE CODE ===
+handle_call({check_retriable, Code}, _From, #{port := Port} = State) ->
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    Facts = [iolist_to_binary(io_lib:format("(error-check-request (code ~p))", [Code]))],
+    {ok, _, S2} = assert_facts(Port, Facts, S1),
+    case run_and_collect(Port, S2) of
+        {ok, AllFacts, S3} ->
+            Results = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"error-check-result">>],
+            case Results of
+                [#{<<"retriable">> := <<"TRUE">>} | _] -> {reply, {ok, true}, S3};
+                _ -> {reply, {ok, false}, S3}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, S2}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),
