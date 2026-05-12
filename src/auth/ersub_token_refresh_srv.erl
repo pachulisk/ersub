@@ -134,15 +134,13 @@ do_refresh(AccountId, #{cooldowns := Cooldowns, retries := Retries} = State) ->
             end
     end.
 
-%% Platform-specific token refresh
-refresh_token(<<"claude">>, _AccountId, Creds) ->
-    refresh_oauth(<<"https://console.anthropic.com/v1/oauth/token">>, Creds);
-refresh_token(<<"openai">>, _AccountId, Creds) ->
-    refresh_oauth(<<"https://auth0.openai.com/oauth/token">>, Creds);
-refresh_token(<<"gemini">>, _AccountId, Creds) ->
-    refresh_oauth(<<"https://oauth2.googleapis.com/token">>, Creds);
-refresh_token(Platform, _AccountId, _Creds) ->
-    {error, {unsupported_platform, Platform}}.
+%% Generic token refresh via CLIPS-configured OAuth endpoints
+refresh_token(Platform, _AccountId, Creds) ->
+    TokenUrl = maps:get(<<"token-url">>, ersub_clips_config:get_oauth_endpoint(Platform), <<>>),
+    case TokenUrl of
+        <<>> -> {error, {unsupported_platform, Platform}};
+        Url -> refresh_oauth(Url, Creds)
+    end.
 
 refresh_oauth(TokenUrl, Creds) ->
     RefreshToken = maps:get(<<"refresh_token">>, Creds, undefined),

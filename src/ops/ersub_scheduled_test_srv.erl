@@ -59,8 +59,10 @@ run_test(TestId) ->
                     {ok, Account} ->
                         #{credentials := Creds, base_url := BaseUrl0} = Account,
                         ApiKey = maps:get(<<"api_key">>, Creds, <<>>),
+                        Platform = maps:get(platform, Account, <<"claude">>),
+                        DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(Platform), <<"https://api.anthropic.com">>),
                         BaseUrl = case BaseUrl0 of
-                            B when B =:= null; B =:= undefined; B =:= <<>> -> <<"https://api.anthropic.com">>;
+                            B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
                             U -> U
                         end,
                         Url = <<BaseUrl/binary, "/v1/messages">>,

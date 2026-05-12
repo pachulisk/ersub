@@ -9,7 +9,8 @@ start(_StartType, _StartArgs) ->
     ersub_scheduler_metrics:init(),
     ersub_image_limiter:init(),
     {ok, Pid} = ersub_sup:start_link(),
-    %% Post-supervisor setup
+    %% Post-supervisor setup: load CLIPS config facts into persistent_term
+    ersub_clips_config:load(),
     ersub_setup:check_and_run(),
     {ok, _} = ersub_router:start_listener(),
     {ok, Pid}.

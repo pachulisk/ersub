@@ -140,10 +140,9 @@ do_request_pipeline(Req0, State, AuthCtx) ->
 do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
+    DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"claude">>), <<"https://api.anthropic.com">>),
     BaseUrl = case BaseUrl0 of
-        null -> <<"https://api.anthropic.com">>;
-        undefined -> <<"https://api.anthropic.com">>;
-        <<>> -> <<"https://api.anthropic.com">>;
+        B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
         U -> U
     end,
 

@@ -182,6 +182,7 @@ handle(<<"POST">>, [<<"accounts">>, <<"reload">>], Req0, State, _Claims) ->
 %% POST /api/admin/clips/reload
 handle(<<"POST">>, [<<"clips">>, <<"reload">>], Req0, State, _Claims) ->
     ersub_clips_pool:reload_rules(),
+    ersub_clips_config:reload(),
     reply_ok(#{success => true}, Req0, State);
 
 %% === Data Export ===

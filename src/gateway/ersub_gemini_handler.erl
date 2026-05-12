@@ -63,9 +63,9 @@ do_pipeline(Req0, State, AuthCtx) ->
 forward(Req0, State, Account, Body, PathInfo, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
+    DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"gemini">>), <<"https://generativelanguage.googleapis.com">>),
     BaseUrl = case BaseUrl0 of
-        B when B =:= null; B =:= undefined; B =:= <<>> ->
-            <<"https://generativelanguage.googleapis.com">>;
+        B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
         U -> U
     end,
     %% Reconstruct Gemini path from path_info

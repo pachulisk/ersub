@@ -6,11 +6,7 @@
          update_status/2, is_schedulable/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
--define(EWMA_ALPHA, 0.2).
--define(RATE_LIMIT_COOLDOWN_MS, 60000).    %% 60s
--define(OVERLOAD_COOLDOWN_MS, 30000).      %% 30s
--define(TEMP_UNSCHED_MS, 600000).          %% 10min
--define(STATUS_CHECK_INTERVAL_MS, 10000).  %% check recovery every 10s
+%% Timing constants now loaded from CLIPS via ersub_clips_config:get_account_timing/0
 
 -record(state, {
     id              :: integer(),
@@ -116,8 +112,9 @@ handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
 handle_cast({success, TtftMs}, State) ->
-    NewEwmaError = ewma(State#state.ewma_error_rate, 0.0, ?EWMA_ALPHA),
-    NewEwmaTtft = ewma(State#state.ewma_ttft_ms, to_float(TtftMs), ?EWMA_ALPHA),
+    Alpha = get_timing(<<"ewma-alpha">>, 0.2),
+    NewEwmaError = ewma(State#state.ewma_error_rate, 0.0, Alpha),
+    NewEwmaTtft = ewma(State#state.ewma_ttft_ms, to_float(TtftMs), Alpha),
     NewLoad = max(0, State#state.current_load - 1),
     {noreply, State#state{
         ewma_error_rate = NewEwmaError,
@@ -126,7 +123,7 @@ handle_cast({success, TtftMs}, State) ->
     }};
 
 handle_cast({error, StatusCode}, State) ->
-    NewEwmaError = ewma(State#state.ewma_error_rate, 1.0, ?EWMA_ALPHA),
+    NewEwmaError = ewma(State#state.ewma_error_rate, 1.0, get_timing(<<"ewma-alpha">>, 0.2)),
     NewLoad = max(0, State#state.current_load - 1),
     Now = erlang:monotonic_time(millisecond),
     %% Use CLIPS account_status.clp rules for state transition
@@ -166,8 +163,12 @@ handle_info(_Info, State) ->
 via(Id) ->
     {via, gproc, {n, l, {account, Id}}}.
 
+get_timing(Key, Default) ->
+    maps:get(Key, ersub_clips_config:get_account_timing(), Default).
+
 schedule_status_check() ->
-    erlang:send_after(?STATUS_CHECK_INTERVAL_MS, self(), check_status).
+    Interval = get_timing(<<"status-check-interval-ms">>, 10000),
+    erlang:send_after(Interval, self(), check_status).
 
 ewma(OldValue, NewSample, Alpha) ->
     Alpha * NewSample + (1.0 - Alpha) * OldValue.

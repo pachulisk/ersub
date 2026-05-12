@@ -27,6 +27,9 @@ validate_resolved_ip(IP) ->
     end.
 
 %% Check if an IP is in a private range.
+%% TODO: Load from CLIPS via ersub_clips_config:get_private_ip_ranges() in future.
+%% Keeping hardcoded pattern matching for now as it is more efficient than
+%% runtime CIDR checks for this hot path.
 -spec is_private_ip(inet:ip_address()) -> boolean().
 
 is_private_ip({10, _, _, _}) -> true;

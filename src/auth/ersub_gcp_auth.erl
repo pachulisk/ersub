@@ -8,8 +8,8 @@
 get_access_token(Credentials) ->
     Email = maps:get(<<"client_email">>, Credentials, <<>>),
     PrivateKeyPem = maps:get(<<"private_key">>, Credentials, <<>>),
-    TokenUri = maps:get(<<"token_uri">>, Credentials,
-                        <<"https://oauth2.googleapis.com/token">>),
+    DefaultTokenUri = maps:get(<<"token-url">>, ersub_clips_config:get_oauth_endpoint(<<"gemini">>), <<"https://oauth2.googleapis.com/token">>),
+    TokenUri = maps:get(<<"token_uri">>, Credentials, DefaultTokenUri),
     Scope = <<"https://www.googleapis.com/auth/cloud-platform">>,
 
     %% 1. Create JWT assertion

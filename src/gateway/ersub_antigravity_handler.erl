@@ -123,10 +123,9 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     %% OAuth bearer token from account credentials.access_token
     AccessToken = maps:get(<<"access_token">>, Creds,
                     maps:get(access_token, Creds, <<>>)),
+    DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"antigravity">>), <<"https://api.anthropic.com">>),
     BaseUrl = case BaseUrl0 of
-        null -> <<"https://api.anthropic.com">>;
-        undefined -> <<"https://api.anthropic.com">>;
-        <<>> -> <<"https://api.anthropic.com">>;
+        B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
         U -> U
     end,
 

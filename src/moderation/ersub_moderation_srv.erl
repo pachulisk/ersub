@@ -233,8 +233,9 @@ record_log(UserId, ContentHash, Result) ->
     end.
 
 maybe_auto_ban(UserId) ->
-    Threshold = ersub_config_srv:get(moderation_ban_threshold, ?DEFAULT_BAN_THRESHOLD),
-    Window = ersub_config_srv:get(moderation_ban_window_seconds, ?DEFAULT_BAN_WINDOW_SECONDS),
+    BanCfg = ersub_clips_config:get_ban_config(),
+    Threshold = maps:get(<<"threshold">>, BanCfg, 5),
+    Window = maps:get(<<"window-seconds">>, BanCfg, 86400),
     WindowInterval = integer_to_list(Window) ++ " seconds",
     case ersub_repo:query(
         "SELECT COUNT(*) FROM moderation_logs "

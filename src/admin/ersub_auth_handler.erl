@@ -106,6 +106,9 @@ handle(_, _, Req0, State) ->
 reply_json(S, B, R) ->
     cowboy_req:reply(S, #{<<"content-type">> => <<"application/json">>}, jsx:encode(B), R).
 
+%% TODO: OAuth provider URLs (auth_url, token_url, user_url) are per-provider
+%% constants. They should be loaded from CLIPS in future, but since they are
+%% per-provider (not per-platform), keeping them in config for now.
 get_oauth_config(<<"github">>) ->
     ClientId = ersub_config_srv:get(auth_oauth_providers_github_client_id, undefined),
     case ClientId of

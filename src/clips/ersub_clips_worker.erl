@@ -393,6 +393,17 @@ handle_call(get_selection_layers, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, S2}
     end;
 
+%% === 16. GET ALL DEFFACTS (for config loading) ===
+handle_call({get_all_facts}, _From, #{port := Port} = State) ->
+    %% Reset triggers deffacts re-assertion, then run collects all facts
+    {ok, _, S1} = port_command_json(Port, #{<<"op">> => <<"retract_all">>}, State),
+    case run_and_collect(Port, S1) of
+        {ok, AllFacts, S2} ->
+            {reply, {ok, AllFacts}, S2};
+        {error, Reason} ->
+            {reply, {error, Reason}, S1}
+    end;
+
 %% === RELOAD RULES ===
 handle_call(reload_rules, _From, #{port := Port} = State) ->
     RulesDir = ersub_config_srv:get(clips_rules_dir, "priv/clips"),

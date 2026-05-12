@@ -96,10 +96,12 @@ handle_info(sync_timer, #{pending_syncs := PS, circuit := Circuit, failures := F
         {_, _} ->
             %% Normal or closed: sync all
             FailCount = do_sync_all(PS),
+            CBConfig = ersub_clips_config:get_circuit_breaker(),
+            MaxFailures = maps:get(<<"failure-threshold">>, CBConfig, 5),
             case FailCount of
                 0 ->
                     State#{pending_syncs => #{}, circuit => closed, failures => 0};
-                _ when Fails + FailCount >= 5 ->
+                _ when Fails + FailCount >= MaxFailures ->
                     logger:error("Circuit breaker: closed → open (~p consecutive failures)", [Fails + FailCount]),
                     State#{pending_syncs => #{}, circuit => open, failures => Fails + FailCount};
                 _ ->

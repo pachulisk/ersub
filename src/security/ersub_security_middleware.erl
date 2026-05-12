@@ -25,12 +25,13 @@ apply_cors_headers(Req, AllowedOrigins) ->
     Origin = cowboy_req:header(<<"origin">>, Req, <<>>),
     case is_allowed_origin(Origin, AllowedOrigins) of
         true ->
+            CorsConfig = ersub_clips_config:get_cors_config(),
             cowboy_req:set_resp_headers(#{
                 <<"access-control-allow-origin">> => Origin,
-                <<"access-control-allow-methods">> => <<"GET, POST, PUT, DELETE, OPTIONS">>,
-                <<"access-control-allow-headers">> => <<"Content-Type, Authorization, x-api-key, anthropic-version, anthropic-beta">>,
-                <<"access-control-max-age">> => <<"86400">>,
-                <<"access-control-allow-credentials">> => <<"true">>
+                <<"access-control-allow-methods">> => maps:get(<<"allowed-methods">>, CorsConfig, <<"GET, POST, PUT, DELETE, OPTIONS">>),
+                <<"access-control-allow-headers">> => maps:get(<<"allowed-headers">>, CorsConfig, <<"Content-Type, Authorization, x-api-key">>),
+                <<"access-control-max-age">> => maps:get(<<"max-age">>, CorsConfig, <<"86400">>),
+                <<"access-control-allow-credentials">> => string:lowercase(maps:get(<<"allow-credentials">>, CorsConfig, <<"true">>))
             }, Req);
         false ->
             Req
@@ -95,17 +96,17 @@ generate_nonce() ->
     base64:encode(crypto:strong_rand_bytes(16)).
 
 build_csp(Nonce) ->
-    iolist_to_binary([
-        <<"default-src 'self'; ">>,
-        <<"script-src 'self' 'nonce-">>, Nonce, <<"' https://challenges.cloudflare.com; ">>,
-        <<"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; ">>,
-        <<"img-src 'self' data: https:; ">>,
-        <<"font-src 'self' data:; ">>,
-        <<"frame-src https://challenges.cloudflare.com https://*.stripe.com; ">>,
-        <<"frame-ancestors 'none'; ">>,
-        <<"form-action 'self'; ">>,
-        <<"base-uri 'self'">>
-    ]).
+    Directives = ersub_clips_config:get_csp_directives(),
+    Parts = lists:map(fun(#{<<"name">> := Name, <<"value">> := Value}) ->
+        case Name of
+            <<"script-src">> -> <<Name/binary, " ", Value/binary, " 'nonce-", Nonce/binary, "'">>;
+            _ -> <<Name/binary, " ", Value/binary>>
+        end
+    end, Directives),
+    case Parts of
+        [] -> <<"default-src 'self'">>;  %% fallback when CLIPS has no directives
+        _ -> iolist_to_binary(lists:join(<<"; ">>, Parts))
+    end.
 
 is_allowed_origin(<<>>, _) -> false;
 is_allowed_origin(_, []) -> false;

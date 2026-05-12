@@ -18,15 +18,19 @@ check_and_mark(RequestId) ->
             ok %% Fail open
     end.
 
-%% Archive old dedup entries (>7 days) to archive table.
+%% Archive old dedup entries (configurable TTL) to archive table.
 -spec archive_old() -> ok.
 archive_old() ->
-    ersub_repo:squery(
+    TtlDays = maps:get(<<"ttl-days">>, ersub_clips_config:get_dedup_config(), 7),
+    Interval = iolist_to_binary([integer_to_list(TtlDays), " days"]),
+    SelectQ = iolist_to_binary([
         "INSERT INTO usage_billing_dedup_archive (request_id, billed_at) "
         "SELECT request_id, billed_at FROM usage_billing_dedup "
-        "WHERE billed_at < NOW() - INTERVAL '7 days' "
-        "ON CONFLICT DO NOTHING"),
-    ersub_repo:squery(
+        "WHERE billed_at < NOW() - INTERVAL '", Interval, "' "
+        "ON CONFLICT DO NOTHING"]),
+    DeleteQ = iolist_to_binary([
         "DELETE FROM usage_billing_dedup "
-        "WHERE billed_at < NOW() - INTERVAL '7 days'"),
+        "WHERE billed_at < NOW() - INTERVAL '", Interval, "'"]),
+    ersub_repo:squery(binary_to_list(SelectQ)),
+    ersub_repo:squery(binary_to_list(DeleteQ)),
     ok.

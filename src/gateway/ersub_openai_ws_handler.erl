@@ -140,9 +140,9 @@ terminate(_Reason, _Req, State) ->
 connect_upstream(Account) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
+    DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"openai">>), <<"wss://api.openai.com">>),
     BaseUrl = case BaseUrl0 of
-        B when B =:= null; B =:= undefined; B =:= <<>> ->
-            <<"wss://api.openai.com">>;
+        B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
         U -> U
     end,
     {Host, Port, Path} = parse_ws_url(BaseUrl),
