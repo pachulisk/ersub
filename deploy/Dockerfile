@@ -38,13 +38,15 @@ WORKDIR /app
 COPY --from=erlang-builder /app/_build/prod/rel/ersub/ .
 COPY --from=erlang-builder /app/priv/ priv/
 COPY config/ersub.yaml config/
+COPY deploy/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 ENV DB_HOST=postgres
 ENV DB_PORT=5432
 ENV DB_USER=postgres
-ENV DB_PASSWORD=changeme
-ENV JWT_SECRET=changeme
+# DB_PASSWORD and JWT_SECRET are auto-generated if not set
 
 EXPOSE 8080
+VOLUME ["/app/data"]
 
-CMD ["bin/ersub", "foreground"]
+ENTRYPOINT ["/app/entrypoint.sh"]

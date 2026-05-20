@@ -39,7 +39,23 @@ check_due_tests() ->
         "AND (last_run_at IS NULL OR "
         "last_run_at + (interval_s || ' seconds')::interval < NOW())") of
         {ok, _, Rows} ->
-            lists:foreach(fun({Id}) -> run_test(binary_to_integer(Id)) end, Rows);
+            lists:foreach(fun({Id}) ->
+                TestId = binary_to_integer(Id),
+                %% Use advisory lock to prevent duplicate execution across nodes
+                case ersub_repo:query(
+                    "SELECT pg_try_advisory_lock($1)", [TestId]) of
+                    {ok, _, [{true}]} ->
+                        try
+                            run_test(TestId)
+                        after
+                            ersub_repo:query(
+                                "SELECT pg_advisory_unlock($1)", [TestId])
+                        end;
+                    _ ->
+                        %% Another node holds the lock, skip
+                        ok
+                end
+            end, Rows);
         _ -> ok
     end.
 

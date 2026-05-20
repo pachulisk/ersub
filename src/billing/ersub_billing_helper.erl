@@ -20,7 +20,12 @@ record_non_streaming_usage(AuthCtx, AccountId, ResponseBody, RequestedModel, Opt
     CacheCreationTokens = maps:get(cache_creation_tokens, Usage, 0),
 
     %% Calculate cost via CLIPS billing.clp rules
-    ActualCost = calculate_cost_clips(RequestedModel, Usage),
+    %% Use billing_model override when model mapping is active (e.g. codex-auto-review -> gpt-5.3-codex)
+    BillingModel = case maps:get(billing_model, Opts, undefined) of
+        undefined -> RequestedModel;
+        BM -> BM
+    end,
+    ActualCost = calculate_cost_clips(BillingModel, Usage),
 
     case ActualCost > 0 of
         true -> ersub_billing_srv:deduct(UserId, ActualCost);
@@ -88,8 +93,10 @@ extract_usage_from_json(#{<<"usage">> := #{<<"prompt_tokens">> := PT,
     #{input_tokens => PT, output_tokens => CT};
 extract_usage_from_json(_) -> #{}.
 
-%% Calculate cost via CLIPS billing.clp rules engine
+%% Calculate cost via CLIPS billing.clp rules engine.
+%% Supports channel pricing overrides via Usage key channel_pricing => map().
 calculate_cost_clips(Model, Usage) ->
+    ChannelPricing = maps:get(channel_pricing, Usage, #{}),
     ClipsUsage = #{
         model => Model,
         input_tokens => maps:get(input_tokens, Usage, 0),
@@ -102,7 +109,14 @@ calculate_cost_clips(Model, Usage) ->
         account_rate_mult => maps:get(account_rate_mult, Usage, 1.0),
         group_rate_mult => maps:get(group_rate_mult, Usage, 1.0),
         total_input_tokens => maps:get(input_tokens, Usage, 0),
-        billing_mode => maps:get(billing_mode, Usage, token)
+        billing_mode => maps:get(billing_mode, Usage, token),
+        %% Bug #2363: channel pricing overrides for cache read etc.
+        channel_input_price => maps:get(<<"input_price">>, ChannelPricing,
+                               maps:get(input_price, ChannelPricing, 0)),
+        channel_output_price => maps:get(<<"output_price">>, ChannelPricing,
+                                maps:get(output_price, ChannelPricing, 0)),
+        channel_cache_read_price => maps:get(<<"cache_read_price">>, ChannelPricing,
+                                   maps:get(cache_read_price, ChannelPricing, 0))
     },
     case ersub_clips_pool:calculate_billing(ClipsUsage) of
         {ok, Result} ->

@@ -55,8 +55,8 @@
     =>
     (bind ?input-cost (* ?it ?ip ?tm ?lim))
     (bind ?output-cost (* ?ot ?op ?tm ?lom))
-    (bind ?cache-read-cost (* ?crt ?crp ?tm))
-    (bind ?cache-creation-cost (+ (* ?c5 ?c5p ?tm) (* ?c1 ?c1p ?tm)))
+    (bind ?cache-read-cost (* ?crt ?crp ?tm ?lim))
+    (bind ?cache-creation-cost (+ (* ?c5 ?c5p ?tm ?lim) (* ?c1 ?c1p ?tm ?lim)))
     (bind ?image-cost (* ?iot ?iop ?tm))
     (bind ?total (+ ?input-cost ?output-cost ?cache-read-cost
                     ?cache-creation-cost ?image-cost))
@@ -65,6 +65,35 @@
         (input-cost ?input-cost) (output-cost ?output-cost)
         (cache-read-cost ?cache-read-cost) (cache-creation-cost ?cache-creation-cost)
         (image-cost ?image-cost) (total-cost ?total) (actual-cost ?actual)))
+)
+
+;; Fallback: no model-specific pricing found — use default rate
+(defrule calculate-token-cost-default
+    (declare (salience -5))
+    (billing-mode (mode token))
+    (usage (model ?m) (input-tokens ?it) (output-tokens ?ot)
+           (cache-read-tokens ?crt) (cache-5m-tokens ?c5)
+           (cache-1h-tokens ?c1) (image-output-tokens ?iot)
+           (account-rate-mult ?arm) (group-rate-mult ?grm))
+    (not (model-pricing (model ?m)))
+    (not (billing-result))
+    (tier-multiplier (value ?tm))
+    (long-ctx-input-mult (value ?lim))
+    (long-ctx-output-mult (value ?lom))
+    =>
+    ;; Default pricing: $3/MTok input, $15/MTok output (conservative estimate)
+    (bind ?ip 0.000003)
+    (bind ?op 0.000015)
+    (bind ?crp 0.0000003)
+    (bind ?input-cost (* ?it ?ip ?tm ?lim))
+    (bind ?output-cost (* ?ot ?op ?tm ?lom))
+    (bind ?cache-read-cost (* ?crt ?crp ?tm ?lim))
+    (bind ?total (+ ?input-cost ?output-cost ?cache-read-cost))
+    (bind ?actual (* ?total ?arm ?grm))
+    (assert (billing-result
+        (input-cost ?input-cost) (output-cost ?output-cost)
+        (cache-read-cost ?cache-read-cost) (cache-creation-cost 0.0)
+        (image-cost 0.0) (total-cost ?total) (actual-cost ?actual)))
 )
 
 ;; Calculate per-request cost
@@ -96,6 +125,36 @@
         (input-cost 0.0) (output-cost 0.0)
         (cache-read-cost 0.0) (cache-creation-cost 0.0)
         (image-cost ?actual) (total-cost ?base) (actual-cost ?actual)))
+)
+
+;; === Channel Pricing Override (Bug #2363) ===
+;; When channel pricing is set (non-zero), use it instead of model-pricing
+
+(defrule calculate-token-cost-channel-override
+    (declare (salience 5))  ;; higher than default, lower than explicit model pricing
+    (billing-mode (mode token))
+    (usage (model ?m) (input-tokens ?it) (output-tokens ?ot)
+           (cache-read-tokens ?crt) (cache-5m-tokens ?c5)
+           (cache-1h-tokens ?c1) (image-output-tokens ?iot)
+           (account-rate-mult ?arm) (group-rate-mult ?grm)
+           (channel-input-price ?cip) (channel-output-price ?cop)
+           (channel-cache-read-price ?ccrp))
+    (test (> ?cip 0))
+    (not (billing-result))
+    (tier-multiplier (value ?tm))
+    (long-ctx-input-mult (value ?lim))
+    (long-ctx-output-mult (value ?lom))
+    =>
+    (bind ?input-cost (* ?it ?cip ?tm ?lim))
+    (bind ?output-cost (* ?ot ?cop ?tm ?lom))
+    (bind ?cache-read-cost (* ?crt (if (> ?ccrp 0) then ?ccrp else (* ?cip 0.1)) ?tm ?lim))
+    (bind ?cache-creation-cost (+ (* ?c5 (* ?cip 0.5) ?tm ?lim) (* ?c1 (* ?cip 0.5) ?tm ?lim)))
+    (bind ?total (+ ?input-cost ?output-cost ?cache-read-cost ?cache-creation-cost))
+    (bind ?actual (* ?total ?arm ?grm))
+    (assert (billing-result
+        (input-cost ?input-cost) (output-cost ?output-cost)
+        (cache-read-cost ?cache-read-cost) (cache-creation-cost ?cache-creation-cost)
+        (image-cost 0.0) (total-cost ?total) (actual-cost ?actual)))
 )
 
 ;; === Tiered Pricing Support ===

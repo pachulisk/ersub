@@ -100,8 +100,11 @@ handle_call({create_order, UserId, Provider, Amount}, _From, State) ->
         [UserId, Provider, Amount]),
     Reply = case Result of
         {ok, 1, _, [{Id, Status, CreatedAt}]} ->
-            {ok, #{id => Id, user_id => UserId, provider => Provider,
-                   amount_usd => Amount, status => Status, created_at => CreatedAt}};
+            Order0 = #{id => Id, user_id => UserId, provider => Provider,
+                       amount_usd => Amount, status => Status,
+                       created_at => CreatedAt},
+            {CheckoutUrl, Order1} = maybe_init_checkout(Id, Provider, Amount, Order0),
+            {ok, Order1#{checkout_url => CheckoutUrl}};
         {error, Reason} -> {error, Reason}
     end,
     {reply, Reply, State};
@@ -306,18 +309,73 @@ to_float(V) when is_float(V) -> V;
 to_float(V) when is_integer(V) -> V * 1.0;
 to_float(_) -> 0.0.
 
+maybe_init_checkout(OrderId, <<"alipay">>, AmountUsd, Order) ->
+    case ersub_alipay:is_available() of
+        false -> {null, Order};
+        true  ->
+            Cfg = case ersub_clips_pool:get_alipay_config() of
+                {ok, C} -> C;
+                _       -> #{}
+            end,
+            Rate     = get_float(maps:get(<<"usd-to-cny-rate">>, Cfg, 7.20)),
+            AmtCny   = to_float(AmountUsd) * Rate,
+            Meta     = jsx:encode(#{cny_amount => AmtCny, cny_rate => Rate}),
+            ersub_repo:query(
+                "UPDATE payment_orders SET metadata = $2 WHERE id = $1",
+                [OrderId, Meta]),
+            case ersub_alipay:create_page_pay(
+                    integer_to_binary(OrderId), AmtCny, <<"ErSub Balance Top-up">>) of
+                {ok, #{checkout_url := Url}} -> {Url, Order};
+                {error, _}                  -> {null, Order}
+            end
+    end;
+maybe_init_checkout(OrderId, <<"stripe">>, AmountUsd, Order) ->
+    UserId     = maps:get(user_id, Order, 0),
+    SuccessUrl = ersub_config_srv:get(payment_stripe_success_url, <<>>),
+    case ersub_stripe:create_checkout_session(UserId, to_float(AmountUsd), ensure_binary(SuccessUrl)) of
+        {ok, #{session_id := SessionId, url := Url}} ->
+            ersub_repo:query(
+                "UPDATE payment_orders SET provider_order_id = $2 WHERE id = $1",
+                [OrderId, SessionId]),
+            {Url, Order};
+        {error, _} ->
+            {null, Order}
+    end;
+maybe_init_checkout(_OrderId, _Provider, _Amount, Order) ->
+    {null, Order}.
+
 do_process_refund(OrderId, UserId, AmtFloat) ->
-    %% Transition: refund_requested → refunding
+    ProviderResult = ersub_repo:query(
+        "SELECT provider, metadata FROM payment_orders WHERE id = $1",
+        [OrderId]),
+    case ProviderResult of
+        {ok, _, [{Provider, Meta}]} ->
+            ProviderBin = ensure_binary(Provider),
+            case ProviderBin of
+                <<"alipay">> ->
+                    MetaMap  = safe_decode_meta(Meta),
+                    AmtCny   = get_float(maps:get(<<"cny_amount">>, MetaMap,
+                                                  AmtFloat * 7.20)),
+                    case ersub_alipay:refund(integer_to_binary(OrderId), AmtCny) of
+                        ok           -> do_internal_refund(OrderId, UserId, AmtFloat);
+                        {error, Reason} -> {error, Reason}
+                    end;
+                _ ->
+                    do_internal_refund(OrderId, UserId, AmtFloat)
+            end;
+        _ ->
+            do_internal_refund(OrderId, UserId, AmtFloat)
+    end.
+
+do_internal_refund(OrderId, UserId, AmtFloat) ->
     case ersub_repo:query(
         "UPDATE payment_orders SET status = 'refunding', updated_at = NOW() "
         "WHERE id = $1 AND status = 'refund_requested' RETURNING id",
         [OrderId])
     of
         {ok, 1, _, [_]} ->
-            %% Credit balance back to user
             ersub_repo:update_user_balance(UserId, AmtFloat),
             ersub_billing_srv:sync_balance(UserId),
-            %% Transition: refunding → refunded
             case ersub_repo:query(
                 "UPDATE payment_orders SET status = 'refunded', updated_at = NOW() "
                 "WHERE id = $1 AND status = 'refunding' RETURNING id",
@@ -328,11 +386,32 @@ do_process_refund(OrderId, UserId, AmtFloat) ->
                                 [OrderId, UserId, AmtFloat]),
                     ok;
                 {ok, 0, _, []} -> {error, refund_finalize_failed};
-                {error, R} -> {error, R}
+                {error, R}     -> {error, R}
             end;
         {ok, 0, _, []} -> {error, invalid_status_transition};
-        {error, R} -> {error, R}
+        {error, R}     -> {error, R}
     end.
+
+safe_decode_meta(null) -> #{};
+safe_decode_meta(undefined) -> #{};
+safe_decode_meta(Meta) when is_binary(Meta) ->
+    try jsx:decode(Meta, [return_maps])
+    catch _:_ -> #{}
+    end;
+safe_decode_meta(_) -> #{}.
+
+get_float(V) when is_float(V)   -> V;
+get_float(V) when is_integer(V) -> V * 1.0;
+get_float(V) when is_binary(V)  ->
+    try binary_to_float(V)
+    catch _:_ -> try binary_to_integer(V) * 1.0 catch _:_ -> 7.20 end
+    end;
+get_float(_) -> 7.20.
+
+ensure_binary(V) when is_binary(V) -> V;
+ensure_binary(V) when is_list(V)   -> list_to_binary(V);
+ensure_binary(V) when is_atom(V)   -> atom_to_binary(V);
+ensure_binary(_)                   -> <<>>.
 
 get_jwt_secret() ->
     case ersub_config_srv:get(auth_jwt_secret, <<>>) of
@@ -341,7 +420,3 @@ get_jwt_secret() ->
         S when is_binary(S) -> S
     end.
 
-ensure_binary(V) when is_binary(V) -> V;
-ensure_binary(V) when is_list(V) -> list_to_binary(V);
-ensure_binary(V) when is_atom(V) -> atom_to_binary(V);
-ensure_binary(_) -> <<>>.

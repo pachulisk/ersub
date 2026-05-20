@@ -1,0 +1,21 @@
+task_id,priority,status,category,file,description,clips_or_erlang,notes
+T6-01,P0,done,admin,src/admin/ersub_admin_handler.erl,Admin user replace-group + batch-concurrency + rpm-status,erlang,3 endpoints
+T6-02,P0,done,admin,src/admin/ersub_admin_handler.erl,Admin account set-privacy + refresh-tier + schedulable + data export/import + batch-refresh + batch-update-credentials,erlang,7 endpoints
+T6-03,P0,done,auth,src/admin/ersub_auth_handler.erl,Auth send-verify-code + validate-promo + validate-invitation + revoke-all-sessions,erlang,4 endpoints
+T6-04,P0,done,billing,src/billing/ersub_payment_handler.erl,Payment user checkout-info + plans + channels + limits + orders/my + cancel + refund-request,erlang,7 endpoints
+T6-05,P0,done,ops,src/admin/ersub_ops_handler.erl,Ops alert-events list + detail + update-status,erlang,3 endpoints
+T6-06,P0,done,ops,src/admin/ersub_ops_handler.erl,Ops dashboard overview + throughput-trend + latency-histogram + error-trend + error-distribution,erlang,5 endpoints cached
+T6-07,P0,done,admin,src/admin/ersub_admin_handler.erl,Redeem codes GET/:id + export + create-and-redeem,erlang,3 endpoints
+T6-08,P1,done,admin,src/admin/ersub_admin_handler.erl,OAuth admin OpenAI + Gemini + Antigravity auth-url + exchange-code + refresh,erlang,9 endpoints
+T6-09,P1,done,admin,src/admin/ersub_admin_handler.erl,Account setup-token-url + exchange-setup-token + setup-token-cookie-auth,erlang,3 endpoints
+T6-10,P1,done,user,src/admin/ersub_user_handler.erl,User notify-email send-code + verify + toggle + remove,erlang,4 endpoints
+T6-11,P1,done,user,src/admin/ersub_user_handler.erl,User affiliate GET /aff + POST /aff/transfer,erlang,2 endpoints
+T6-12,P1,done,admin,src/admin/ersub_admin_handler.erl + auth handler,Settings web-search-emulation CRUD + test + reset-usage + settings/public,erlang,5 endpoints
+T6-13,P1,done,ops,src/admin/ersub_ops_handler.erl,Ops email-notification config + metric-thresholds,erlang,4 endpoints
+T6-14,P1,done,ops,src/admin/ersub_ops_handler.erl,Dashboard users-usage + api-keys-usage + user-breakdown + aggregation/backfill,erlang,4 endpoints
+T6-15,P2,done,gateway,src/ersub_router.erl,Antigravity extended routes v1beta + models + usage,erlang,4 routes
+T6-16,P2,done,auth,src/admin/ersub_auth_handler.erl,OAuth per-provider complete-registration + bind-login + create-account + pending flow,erlang,6 endpoints
+T6-17,P2,done,admin,multiple handlers,Misc: affiliates/users/lookup + templates/:id/monitors + accounts/:id/scheduled-tests + user-attributes/batch + system-logs/health,erlang,5 endpoints
+T6-18,P2,done,admin,src/admin/ersub_admin_handler.erl,Account check-mixed-channel + antigravity/default-model-mapping + temp-unschedulable GET/DELETE,erlang,4 endpoints
+T6-19,P2,done,gateway,src/ersub_router.erl + ersub_health_handler.erl + ersub_auth_handler.erl,Event logging stub + settings/public,erlang,2 endpoints
+T6-20,P2,done,admin,src/admin/ersub_admin_handler.erl,Proxy all + data GET/POST + quality-check + accounts,erlang,5 endpoints

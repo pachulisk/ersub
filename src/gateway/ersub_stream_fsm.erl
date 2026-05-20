@@ -17,7 +17,10 @@
     first_token   :: integer() | undefined,
     account_id    :: integer(),
     request_id    :: binary(),
-    model         :: binary()
+    model         :: binary(),
+    user_id       :: integer() | undefined,
+    key_id        :: integer() | undefined,
+    ip_address    :: binary() | undefined
 }).
 
 %%% API
@@ -67,7 +70,10 @@ init({Caller, ConnInfo, Headers, Body, Opts}) ->
                 start_time = erlang:monotonic_time(millisecond),
                 account_id = maps:get(account_id, Opts, 0),
                 request_id = maps:get(request_id, Opts, <<>>),
-                model = maps:get(model, Opts, <<>>)
+                model = maps:get(model, Opts, <<>>),
+                user_id = maps:get(user_id, Opts, undefined),
+                key_id = maps:get(key_id, Opts, undefined),
+                ip_address = maps:get(ip_address, Opts, undefined)
             },
             %% Wait for connection up, then send the request
             case gun:await_up(ConnPid, 10000, MRef) of
@@ -148,12 +154,14 @@ streaming(info, {gun_data, ConnPid, StreamRef, fin, Chunk},
 streaming(info, {gun_error, ConnPid, _StreamRef, Reason},
           #data{conn_pid = ConnPid, caller = Caller} = Data) ->
     Caller ! {stream_error, self(), {mid_stream_error, Reason}},
+    record_partial_usage(Data),
     cleanup(Data),
     {stop, normal};
 
 streaming(info, {'DOWN', MRef, process, ConnPid, Reason},
           #data{conn_pid = ConnPid, conn_mref = MRef, caller = Caller} = Data) ->
     Caller ! {stream_error, self(), {conn_down_mid_stream, Reason}},
+    record_partial_usage(Data),
     {stop, normal, Data#data{conn_pid = undefined}}.
 
 %% DONE
@@ -165,9 +173,12 @@ done(internal, finalize, Data) ->
         request_id => Data#data.request_id,
         requested_model => Data#data.model,
         duration_ms => Duration,
-        first_token_ms => Data#data.first_token,
+        first_token_ms => case Data#data.first_token of undefined -> null; T -> T end,
         stream => true,
-        request_type => 2  %% stream
+        request_type => 2,  %% stream
+        user_id => Data#data.user_id,
+        api_key_id => Data#data.key_id,
+        ip_address => Data#data.ip_address
     })),
     {stop, normal}.
 
@@ -176,6 +187,27 @@ terminate(_Reason, _State, Data) ->
     ok.
 
 %%% Internal
+
+record_partial_usage(#data{accumulated = Acc} = Data) ->
+    InputTokens = maps:get(input_tokens, Acc, 0),
+    OutputTokens = maps:get(output_tokens, Acc, 0),
+    case InputTokens + OutputTokens > 0 of
+        true ->
+            Duration = erlang:monotonic_time(millisecond) - Data#data.start_time,
+            ersub_usage_logger:log(maps:merge(Acc, #{
+                account_id => Data#data.account_id,
+                request_id => Data#data.request_id,
+                requested_model => Data#data.model,
+                duration_ms => Duration,
+                first_token_ms => case Data#data.first_token of undefined -> null; T2 -> T2 end,
+                stream => true,
+                request_type => 3,  %% partial stream
+                user_id => Data#data.user_id,
+                api_key_id => Data#data.key_id,
+                ip_address => Data#data.ip_address
+            }));
+        false -> ok
+    end.
 
 cleanup(#data{conn_pid = undefined}) -> ok;
 cleanup(#data{conn_pid = ConnPid, conn_mref = MRef}) ->
@@ -242,9 +274,14 @@ extract_json_from_sse(Event) ->
         [] -> error;
         _ ->
             Combined = iolist_to_binary(lists:join(<<>>, DataLines)),
-            case jsx:is_json(Combined) of
-                true -> {ok, jsx:decode(Combined, [return_maps])};
-                false -> error
+            case Combined of
+                <<>> -> error;
+                <<"[DONE]">> -> error;
+                _ ->
+                    case jsx:is_json(Combined) of
+                        true -> {ok, jsx:decode(Combined, [return_maps])};
+                        false -> error
+                    end
             end
     end.
 

@@ -1,7 +1,7 @@
 -module(ersub_client_detector).
 
 -export([detect_client/2, enforce_client_restriction/2,
-         is_codex_cli/1, detect_warmup/1]).
+         is_codex_cli/1, check_codex_enforcement/2, detect_warmup/1]).
 
 %% Detect client type from request headers and body.
 %% Returns {claude_code, Version} | {official, Type} | unknown.
@@ -78,13 +78,31 @@ check_official_client(Headers) ->
             end
     end.
 
-%% F15: Enhanced CodexCLI detection with ForceCodexCLI and codex_cli_rs UA
--spec is_codex_cli(map()) -> boolean().
-is_codex_cli(Headers) ->
-    UA = maps:get(<<"user-agent">>, Headers, <<>>),
-    case re:run(UA, <<"(?i)(claude-cli|codex_cli_rs)/[0-9]">>) of
+%% F15/T4-18: Enhanced CodexCLI detection.
+%% Accepts a User-Agent binary and returns true if it contains "codex" or "Codex"
+%% (case-insensitive check), or matches known CLI patterns.
+-spec is_codex_cli(binary()) -> boolean().
+is_codex_cli(UA) when is_binary(UA) ->
+    case re:run(UA, <<"(?i)codex">>) of
         {match, _} -> true;
         nomatch -> false
+    end;
+is_codex_cli(_) ->
+    false.
+
+%% T4-18: Check CodexCLI enforcement for a group.
+%% If force_codex_cli is true in GroupConfig, the request must come from a CodexCLI client.
+-spec check_codex_enforcement(cowboy_req:req(), map()) -> ok | {error, codex_cli_required}.
+check_codex_enforcement(Req, GroupConfig) ->
+    case maps:get(<<"force_codex_cli">>, GroupConfig, false) of
+        true ->
+            UA = cowboy_req:header(<<"user-agent">>, Req, <<>>),
+            case is_codex_cli(UA) of
+                true -> ok;
+                false -> {error, codex_cli_required}
+            end;
+        _ ->
+            ok
     end.
 
 %% F20: Detect warmup/ping requests

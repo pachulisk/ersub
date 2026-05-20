@@ -3,6 +3,20 @@
 
 -export([init/2]).
 
+init(Req0, [event_logging]) ->
+    case cowboy_req:method(Req0) of
+        <<"POST">> ->
+            Req = cowboy_req:reply(200,
+                #{<<"content-type">> => <<"application/json">>},
+                jsx:encode(#{ok => true}), Req0),
+            {ok, Req, [event_logging]};
+        _ ->
+            Req = cowboy_req:reply(405,
+                #{<<"content-type">> => <<"application/json">>},
+                jsx:encode(#{error => <<"Method not allowed">>}), Req0),
+            {ok, Req, [event_logging]}
+    end;
+
 init(Req0, State) ->
     DbStatus = check_db(),
     ClipsStatus = check_clips(),

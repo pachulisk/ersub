@@ -10,11 +10,14 @@
 -export([evaluate_moderation/1, evaluate_refund_transition/1,
          evaluate_messages_dispatch/1]).
 %% Configuration query APIs
--export([get_platform_config/1, check_retriable/1, get_selection_layers/0]).
+-export([get_platform_config/1, check_retriable/1, get_selection_layers/0,
+         get_alipay_config/0]).
 %% Channel filter API
 -export([filter_channels/1]).
 %% Subscription validation API
 -export([evaluate_subscription/1]).
+%% Group authorization API
+-export([check_group_auth/1]).
 
 -define(POOL, ersub_clips_pool).
 
@@ -120,6 +123,13 @@ evaluate_subscription(SubData) ->
         gen_server:call(W, {evaluate_subscription, SubData}, 10000)
     end).
 
+%% T4-02: Check group authorization via CLIPS group_check.clp rules.
+-spec check_group_auth(map()) -> {ok, map()} | {error, term()}.
+check_group_auth(AuthData) ->
+    with_worker(fun(W) ->
+        gen_server:call(W, {check_group_auth, AuthData}, 10000)
+    end).
+
 %% Get platform configuration from CLIPS facts.
 -spec get_platform_config(binary()) -> {ok, map()} | {error, term()}.
 get_platform_config(Platform) ->
@@ -142,4 +152,11 @@ check_retriable(Code) ->
 get_selection_layers() ->
     with_worker(fun(W) ->
         gen_server:call(W, get_selection_layers, 5000)
+    end).
+
+%% Get Alipay business configuration (gateway URL, rate, enabled flag).
+-spec get_alipay_config() -> {ok, map()} | {error, term()}.
+get_alipay_config() ->
+    with_worker(fun(W) ->
+        gen_server:call(W, get_alipay_config, 5000)
     end).

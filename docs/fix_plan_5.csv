@@ -1,0 +1,31 @@
+task_id,priority,status,category,file,description,clips_or_erlang,notes
+T5-01,P0,done,admin,src/admin/ersub_admin_handler.erl,Admin User GET/PUT/DELETE users/:id,erlang,3 endpoints
+T5-02,P0,done,admin,src/admin/ersub_admin_handler.erl + migration 010,Admin User balance + api-keys + usage + balance-history,erlang,4 endpoints + balance_history table
+T5-03,P0,done,admin,src/admin/ersub_admin_handler.erl,Admin Account GET/PUT/:id + test + usage + models,erlang,5 endpoints
+T5-04,P0,done,admin,src/admin/ersub_admin_handler.erl,Admin Group GET/PUT/DELETE/:id + rpm-overrides + api-keys,erlang,8 endpoints
+T5-05,P0,done,channel,src/admin/ersub_admin_handler.erl,Channel admin CRUD + model-pricing,erlang,6 endpoints
+T5-06,P0,done,auth,src/admin/ersub_auth_handler.erl,Auth refresh + logout + me + 2fa login,erlang,4 endpoints
+T5-07,P0,done,user,src/admin/ersub_user_handler.erl + router,User subscriptions list/active/progress/summary,erlang,4 endpoints + route
+T5-08,P0,done,user,src/admin/ersub_user_handler.erl + router,User redeem + history,erlang,2 endpoints + route
+T5-09,P0,done,user,src/admin/ersub_user_handler.erl + router,User groups available + rates,erlang,2 endpoints + route
+T5-10,P0,done,user,src/admin/ersub_user_handler.erl,TOTP 2FA user endpoints status/setup/enable/disable,erlang,4 endpoints
+T5-11,P1,done,admin,src/admin/ersub_admin_handler.erl,Redeem codes full management generate/list/stats/delete/expire,erlang,6 endpoints
+T5-12,P1,done,admin,src/admin/ersub_admin_handler.erl,Promo codes full CRUD + usages,erlang,6 endpoints
+T5-13,P1,done,ops,src/admin/ersub_ops_handler.erl,Channel Monitor full CRUD + run + history,erlang,7 endpoints
+T5-14,P1,done,billing,src/billing/ersub_payment_handler.erl,Payment admin orders/refund/providers/dashboard,erlang,8 endpoints
+T5-15,P1,done,ops,src/admin/ersub_ops_handler.erl,Dashboard advanced: realtime + groups + trends + ranking,erlang,5 endpoints cached
+T5-16,P1,done,ops,src/admin/ersub_ops_handler.erl,Ops realtime signals concurrency/availability/traffic,erlang,4 endpoints
+T5-17,P1,done,ops,src/admin/ersub_ops_handler.erl,Ops upstream-errors + retry + system-logs + cleanup,erlang,4 endpoints
+T5-18,P1,done,user,src/admin/ersub_user_handler.erl,User email/identity binding + unbind,erlang,3 endpoints
+T5-19,P1,done,admin,src/admin/ersub_admin_handler.erl,Account OAuth management generate-auth-url/exchange-code/cookie-auth,erlang,3 endpoints
+T5-20,P1,done,ops,src/admin/ersub_ops_handler.erl,Ops runtime settings alert/logging/advanced,erlang,7 endpoints
+T5-21,P2,done,admin,src/admin/ersub_admin_handler.erl,Proxy update + stats + batch + batch-delete,erlang,4 endpoints
+T5-22,P2,done,ops,src/admin/ersub_ops_handler.erl,Channel monitor templates GET/PUT/DELETE/:id + apply,erlang,4 endpoints
+T5-23,P2,done,ops,src/admin/ersub_ops_handler.erl,Scheduled tests update + results,erlang,2 endpoints
+T5-24,P2,done,ops,src/admin/ersub_ops_handler.erl,TLS profiles GET/:id + PUT/:id,erlang,2 endpoints
+T5-25,P2,done,admin,src/admin/ersub_admin_handler.erl,Subscription GET/:id + by-group + by-user,erlang,3 endpoints
+T5-26,P2,done,admin,src/admin/ersub_admin_handler.erl,Affiliate admin users list/overview/update/delete,erlang,4 endpoints
+T5-27,P2,done,admin,src/admin/ersub_announcement_handler.erl,Announcement GET/:id + read-status,erlang,2 endpoints
+T5-28,P2,done,admin,src/admin/ersub_admin_handler.erl,Admin settings admin-api-key + rectifier + beta-policy,erlang,7 endpoints
+T5-29,P2,done,middleware,src/concurrency/ersub_rate_limiter.erl + clips,Rate limiting per endpoint type,clips+erlang,CLIPS policy + check_endpoint_rate/2
+T5-30,P2,done,gateway,src/ersub_router.erl,Gateway route aliases /chat/completions + /responses + codex,erlang,8 route aliases

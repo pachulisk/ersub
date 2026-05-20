@@ -1,0 +1,26 @@
+task_id,priority,status,category,file,description,clips_or_erlang,notes
+T4-01,P0,done,gateway,src/gateway/ersub_claude_handler.erl,Token counting proxy endpoint POST /v1/messages/count_tokens,erlang,route + handler added
+T4-02,P0,done,middleware,src/auth/ersub_auth_middleware.erl + priv/clips/group_check.clp,Group assignment check middleware,clips+erlang,CLIPS rule + wired into claude_handler
+T4-03,P0,done,ops,src/ops/ersub_dashboard_cache.erl,Dashboard query ETS cache with 30s TTL,erlang,new gen_server + supervisor + ops_handler wired
+T4-04,P1,done,admin,src/admin/ersub_keys_handler.erl,API Key update endpoint PUT /api/v1/keys/:id,erlang,ownership verification + dynamic SQL
+T4-05,P1,done,auth,src/admin/ersub_auth_handler.erl,Password reset flow forgot-password + reset-password,erlang,HMAC signed tokens + expiry
+T4-06,P1,done,admin,src/admin/ersub_admin_handler.erl,Account batch operations batch-create + batch-update + batch-clear-error,erlang,3 endpoints
+T4-07,P1,done,admin,src/admin/ersub_admin_handler.erl,Subscription management extend + bulk-assign + reset-quota + progress,erlang,4 endpoints
+T4-08,P1,done,ops,src/admin/ersub_ops_handler.erl,Content moderation management API config + status + logs + unban,erlang,5 endpoints
+T4-09,P1,done,user,src/admin/ersub_user_handler.erl,User dashboard stats + trend + model breakdown,erlang,3 endpoints
+T4-10,P1,done,admin,src/admin/ersub_admin_handler.erl,Settings management typed endpoints overload-cooldown + rate-limit-cooldown + stream-timeout,erlang,6 endpoints + CLIPS config reload
+T4-11,P1,done,admin,src/admin/ersub_admin_handler.erl,Account credential lifecycle refresh + clear-rate-limit + reset-quota + stats,erlang,4 endpoints
+T4-12,P1,done,admin,src/admin/ersub_admin_handler.erl,Group management capacity-summary + sort-order + rate-multipliers,erlang,4 endpoints
+T4-13,P2,done,admin,src/admin/ersub_announcement_handler.erl,Announcement enhancement status + read tracking + update + delete,erlang,status filter + admin JWT
+T4-14,P2,done,ops,src/admin/ersub_ops_handler.erl + priv/migrations/009_fix_plan_4.sql,Operations error tracking request-errors CRUD + resolve,erlang,migration + 3 endpoints
+T4-15,P2,done,admin,src/admin/ersub_admin_handler.erl,User attributes definition management admin CRUD + reorder,erlang,5 endpoints
+T4-16,P2,done,admin,src/admin/ersub_admin_handler.erl,Affiliate management invites + rebates + transfers + batch-rate,erlang,4 endpoints
+T4-17,P2,done,admin,src/admin/ersub_admin_handler.erl,Proxy testing endpoint POST proxies/:id/test,erlang,gen_tcp connectivity test + latency
+T4-18,P2,done,gateway,src/gateway/ersub_client_detector.erl + priv/clips/codex_enforcement.clp,CodexCLI forced execution UA check + CLIPS rule,clips+erlang,CLIPS rule + Erlang check
+T4-19,P2,done,middleware,src/auth/ersub_auth_middleware.erl,Backend mode guard enhancement admin bypass + endpoint whitelist,erlang,check_backend_mode/2
+T4-20,P2,done,middleware,src/gateway/ersub_request_id.erl,Client request ID middleware X-Request-Id generation,erlang,new module UUID v4
+T4-21,P3,done,ops,src/admin/ersub_ops_handler.erl,Usage cleanup task management API,erlang,3 endpoints
+T4-22,P3,done,billing,src/billing/ersub_payment_handler.erl + priv/migrations/009_fix_plan_4.sql,Payment plan management CRUD,erlang,4 endpoints admin-only
+T4-23,P3,done,admin,src/admin/ersub_admin_handler.erl,System version info endpoint,erlang,OTP + ERTS + uptime
+T4-24,P3,done,gateway,priv/clips/web_search_emulation.clp + src/gateway/ersub_web_search.erl,Web search emulation CLIPS rules + response synthesis,clips+erlang,4 CLIPS rules + Erlang module
+T4-25,P3,done,admin,src/admin/ersub_admin_handler.erl,Codex session import endpoint,erlang,creates oauth account from session

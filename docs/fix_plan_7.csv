@@ -1,0 +1,12 @@
+task_id,priority,status,category,file,description,clips_or_erlang,notes
+T7-01,HIGH,done,billing,src/billing/ersub_payment_handler.erl,Payment verify + refund-eligible + public verify/resolve + admin retry,erlang,5 endpoints
+T7-02,HIGH,done,multi,ersub_keys_handler + ersub_user_handler + ersub_admin_handler,Single-item GET keys/:id + usage/:id + proxies/:id + admin api-keys/:id PUT,erlang,4 endpoints
+T7-03,HIGH,done,admin,src/admin/ersub_admin_handler.erl,Admin usage search-users + search-api-keys,erlang,2 endpoints
+T7-04,HIGH,done,user,src/admin/ersub_user_handler.erl,User email bind send-code,erlang,1 endpoint
+T7-05,MEDIUM,done,auth,src/admin/ersub_auth_handler.erl,OAuth bind/start + pending send-verify-code + bind-token,erlang,3 endpoints
+T7-06,MEDIUM,done,admin+ops,ersub_admin_handler + ersub_ops_handler,Groups all + usage-summary + openai-token-stats,erlang,3 endpoints
+T7-07,MEDIUM,done,user,src/admin/ersub_user_handler.erl,User channel-monitors list + status + api-keys-usage,erlang,3 endpoints
+T7-08,MEDIUM,done,admin,src/admin/ersub_admin_handler.erl,OpenAI OAuth admin accounts/:id/refresh + create-from-oauth,erlang,2 endpoints
+T7-09,LOW,done,ops,src/admin/ersub_ops_handler.erl,Risk control api-keys/test + hashes delete + hashes/all,erlang,3 endpoints
+T7-10,LOW,done,user,src/admin/ersub_user_handler.erl,TOTP verification-method + send-code,erlang,2 endpoints
+T7-11,LOW,done,auth,src/admin/ersub_auth_handler.erl,WeChat payment OAuth start + callback,erlang,2 endpoints

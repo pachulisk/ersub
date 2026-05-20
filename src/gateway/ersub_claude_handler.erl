@@ -6,7 +6,10 @@
 init(Req0, State) ->
     case cowboy_req:method(Req0) of
         <<"POST">> ->
-            handle_post(Req0, State);
+            case State of
+                [count_tokens] -> handle_count_tokens(Req0, State);
+                _ -> handle_post(Req0, State)
+            end;
         <<"OPTIONS">> ->
             Req = cowboy_req:reply(204, #{}, <<>>, Req0),
             {ok, Req, State};
@@ -42,6 +45,16 @@ handle_authenticated(Req0, State, AuthCtx) ->
     #{user_id := UserId, key_rpm_limit := KeyRpm, user_rpm_limit := UserRpm,
       key_id := _KeyId, user_max_concurrency := MaxConc} = AuthCtx,
 
+    %% 2b. Group assignment check (T4-02)
+    case ersub_auth_middleware:check_group_assignment(UserId) of
+        {error, no_group_assigned} ->
+            Req = reply_json(403, #{error => #{
+                type => <<"permission_error">>,
+                message => <<"No group assigned. Contact admin to assign a group.">>
+            }}, Req0),
+            {ok, Req, State};
+        ok ->
+
     %% 3. Rate limit check
     EffectiveRpm = effective_rpm(KeyRpm, UserRpm),
     case ersub_rate_limiter:check_rpm(user, UserId, EffectiveRpm) of
@@ -73,7 +86,8 @@ handle_authenticated(Req0, State, AuthCtx) ->
                         ersub_concurrency_srv:release(UserId, ConcRef)
                     end
             end
-    end.
+    end
+    end. %% end group assignment check
 
 do_request_pipeline(Req0, State, AuthCtx) ->
     #{user_id := UserId} = AuthCtx,
@@ -137,6 +151,94 @@ do_request_pipeline(Req0, State, AuthCtx) ->
             end
     end.
 
+%% === T4-01: Token counting proxy — no billing, no usage, no concurrency ===
+
+handle_count_tokens(Req0, State) ->
+    case ersub_auth_middleware:authenticate(Req0) of
+        {error, Reason} ->
+            Req = handle_auth_error(Reason, Req0),
+            {ok, Req, State};
+        {ok, AuthCtx} ->
+            case check_ip_access(Req0, AuthCtx) of
+                deny ->
+                    Req = reply_json(403, #{error => #{
+                        type => <<"permission_error">>,
+                        message => <<"IP address not allowed">>
+                    }}, Req0),
+                    {ok, Req, State};
+                allow ->
+                    do_count_tokens(Req0, State, AuthCtx)
+            end
+    end.
+
+do_count_tokens(Req0, State, AuthCtx) ->
+    #{user_id := UserId} = AuthCtx,
+    case read_body(Req0) of
+        {ok, Body, Req1} ->
+            case jsx:is_json(Body) of
+                false ->
+                    Req = reply_json(400, #{error => #{
+                        type => <<"invalid_request_error">>,
+                        message => <<"Invalid JSON body">>
+                    }}, Req1),
+                    {ok, Req, State};
+                true ->
+                    Parsed = jsx:decode(Body, [return_maps]),
+                    %% Strip fields not accepted by count_tokens
+                    AllowedFields = [<<"model">>, <<"messages">>, <<"system">>,
+                                     <<"tools">>, <<"tool_choice">>, <<"thinking">>],
+                    CleanParsed = maps:with(AllowedFields, Parsed),
+                    CleanBody = jsx:encode(CleanParsed),
+                    Model = maps:get(<<"model">>, Parsed, <<>>),
+                    SchedulerReq = #{
+                        user_id => UserId,
+                        platform => <<"claude">>,
+                        session_hash => <<>>,
+                        model => Model
+                    },
+                    case ersub_scheduler_srv:select_account(SchedulerReq) of
+                        {error, no_available_account} ->
+                            Req = reply_json(503, #{error => #{
+                                type => <<"api_error">>,
+                                message => <<"No upstream accounts available">>
+                            }}, Req1),
+                            {ok, Req, State};
+                        {ok, Account} ->
+                            forward_count_tokens(Req1, State, Account, CleanBody)
+                    end
+            end
+    end.
+
+forward_count_tokens(Req0, State, Account, Body) ->
+    #{credentials := Creds, base_url := BaseUrl0} = Account,
+    ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
+    DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"claude">>),
+                          <<"https://api.anthropic.com">>),
+    BaseUrl = case BaseUrl0 of
+        B when B =:= null; B =:= undefined; B =:= <<>> -> DefaultUrl;
+        U -> U
+    end,
+    Url = <<BaseUrl/binary, "/v1/messages/count_tokens?beta=true">>,
+    Headers = [
+        {<<"x-api-key">>, ApiKey},
+        {<<"content-type">>, <<"application/json">>},
+        {<<"anthropic-version">>, <<"2023-06-01">>},
+        {<<"anthropic-beta">>, <<"token-counting-2024-11-01">>}
+    ],
+    case http_request(Url, Headers, Body) of
+        {ok, Status, RespHeaders, RespBody} ->
+            FilteredHeaders = filter_response_headers(RespHeaders),
+            Req = cowboy_req:reply(Status, FilteredHeaders, RespBody, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            logger:error("count_tokens upstream failed: ~p", [Reason]),
+            Req = reply_json(502, #{error => #{
+                type => <<"api_error">>,
+                message => <<"Upstream request failed">>
+            }}, Req0),
+            {ok, Req, State}
+    end.
+
 do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
@@ -149,6 +251,13 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
     IsStream = maps:get(<<"stream">>, Parsed, false),
     %% For MVP, only handle non-streaming
     %% Streaming will be added in P2-01
+
+    %% Optionally strip thinking signatures to avoid invalid signature errors
+    %% when switching accounts (Bug #2320)
+    Body2 = case ersub_config_srv:get(strip_thinking_signatures, false) of
+        true -> strip_thinking_signatures(OrigBody);
+        false -> OrigBody
+    end,
 
     AccountType = maps:get(account_type, Account, <<"api_key">>),
     RequestModel = maps:get(<<"model">>, Parsed, <<>>),
@@ -173,16 +282,22 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
                 region => maps:get(<<"region">>, Creds, <<"us-east-1">>),
                 service => <<"bedrock">>
             },
-            ersub_aws_signer:sign_request(<<"POST">>, Url, BaseHeaders, OrigBody, AwsCreds);
+            ersub_aws_signer:sign_request(<<"POST">>, Url, BaseHeaders, Body2, AwsCreds);
         _ ->
             [{<<"x-api-key">>, ApiKey} | BaseHeaders]
     end,
 
+    %% Optionally strip anthropic-attribution header to improve cache hit rate
+    Headers2 = case ersub_config_srv:get(strip_attribution_header, false) of
+        true -> lists:keydelete(<<"anthropic-attribution">>, 1, Headers);
+        false -> Headers
+    end,
+
     case IsStream of
         true ->
-            handle_streaming(Req0, State, Url, Headers, OrigBody, Account);
+            handle_streaming(Req0, State, Url, Headers2, Body2, Account, AuthCtx);
         _ ->
-            case http_request(Url, Headers, OrigBody) of
+            case http_request(Url, Headers2, Body2) of
                 {ok, Status, RespHeaders, RespBody} ->
                     %% Record usage and deduct billing for non-streaming
                     Model = maps:get(<<"model">>, Parsed, <<>>),
@@ -191,13 +306,33 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
                         S when S >= 200, S < 300 ->
                             ersub_billing_helper:record_non_streaming_usage(
                                 AuthCtx, AccountId, RespBody, Model);
-                        _ -> ok
+                        _ ->
+                            ersub_system_log:log_request_error(#{
+                                request_id => null,
+                                user_id => maps:get(user_id, AuthCtx, null),
+                                account_id => maps:get(id, Account, null),
+                                platform => <<"claude">>,
+                                model => Model,
+                                status_code => Status,
+                                error_type => <<"upstream">>,
+                                error_message => RespBody
+                            })
                     end,
                     FilteredHeaders = filter_response_headers(RespHeaders),
                     Req = cowboy_req:reply(Status, FilteredHeaders, RespBody, Req0),
                     {ok, Req, State};
                 {error, Reason} ->
                     logger:error("Upstream request failed: ~p", [Reason]),
+                    ersub_system_log:log_request_error(#{
+                        user_id => maps:get(user_id, AuthCtx, null),
+                        account_id => maps:get(id, Account, null),
+                        platform => <<"claude">>,
+                        model => maps:get(<<"model">>, Parsed, <<>>),
+                        status_code => 502,
+                        error_type => <<"connection">>,
+                        error_message => iolist_to_binary(
+                            io_lib:format("~p", [Reason]))
+                    }),
                     Req = reply_json(502, #{error => #{
                         type => <<"api_error">>,
                         message => <<"Upstream request failed">>
@@ -208,66 +343,122 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
 
 %%% Streaming
 
-handle_streaming(Req0, State, Url, Headers, Body, Account) ->
+handle_streaming(Req0, State, Url, Headers, Body, Account, AuthCtx) ->
+    %% Send response headers immediately to enable keepalive during upstream connect.
+    %% This prevents Cloudflare 524 timeouts when upstream takes >100s (e.g. Anthropic Opus
+    %% with extended thinking). Errors are sent as SSE events since we committed to 200.
+    StreamHeaders = #{
+        <<"content-type">> => <<"text/event-stream">>,
+        <<"cache-control">> => <<"no-cache">>,
+        <<"connection">> => <<"keep-alive">>
+    },
+    Req1 = cowboy_req:stream_reply(200, StreamHeaders, Req0),
+
     ConnInfo = parse_url_to_conn_info(Url),
     AccountId = maps:get(id, Account, 0),
     ReqId = generate_request_id(),
-    Opts = #{account_id => AccountId, request_id => ReqId, model => <<"unknown">>},
+    {PeerIP, _PeerPort} = cowboy_req:peer(Req0),
+    IPBin = list_to_binary(inet:ntoa(PeerIP)),
+    Opts = #{account_id => AccountId, request_id => ReqId, model => <<"unknown">>,
+             user_id => maps:get(user_id, AuthCtx, undefined),
+             key_id => maps:get(key_id, AuthCtx, undefined),
+             ip_address => IPBin},
+    LogCtx = #{
+        user_id => maps:get(user_id, AuthCtx, null),
+        account_id => AccountId,
+        platform => <<"claude">>,
+        model => maps:get(model, Opts, <<>>)
+    },
     case ersub_stream_fsm:start(ConnInfo, Headers, Body, Opts) of
         {ok, FsmPid} ->
-            %% Wait for headers from FSM
-            receive
-                {stream_headers, FsmPid, _Status, RespHeaders} ->
-                    %% Send chunked response headers
-                    FilteredHeaders = filter_response_headers(maps:from_list(RespHeaders)),
-                    StreamHeaders = FilteredHeaders#{
-                        <<"content-type">> => <<"text/event-stream">>,
-                        <<"cache-control">> => <<"no-cache">>,
-                        <<"connection">> => <<"keep-alive">>
-                    },
-                    Req1 = cowboy_req:stream_reply(200, StreamHeaders, Req0),
-                    %% Stream chunks
-                    stream_loop(Req1, State, FsmPid);
-                {stream_error, FsmPid, {upstream_error, ErrStatus, _ErrHeaders, ErrBody}} ->
-                    %% Upstream returned an error — pass it through
-                    Req = cowboy_req:reply(ErrStatus,
-                        #{<<"content-type">> => <<"application/json">>},
-                        ErrBody, Req0),
-                    {ok, Req, State};
-                {stream_error, FsmPid, Reason} ->
-                    logger:error("Stream connect error: ~p", [Reason]),
-                    Req = reply_json(502, #{error => #{
-                        type => <<"api_error">>,
-                        message => <<"Upstream streaming failed">>
-                    }}, Req0),
-                    {ok, Req, State}
-            after 30000 ->
-                ersub_stream_fsm:stop(FsmPid),
-                Req = reply_json(504, #{error => #{
-                    type => <<"api_error">>,
-                    message => <<"Upstream connection timeout">>
-                }}, Req0),
-                {ok, Req, State}
-            end;
+            wait_for_stream_start(Req1, State, FsmPid, LogCtx);
         {error, Reason} ->
             logger:error("Failed to start stream FSM: ~p", [Reason]),
-            Req = reply_json(502, #{error => #{
-                type => <<"api_error">>,
-                message => <<"Failed to connect to upstream">>
-            }}, Req0),
-            {ok, Req, State}
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 502,
+                error_type => <<"connection">>,
+                error_message => iolist_to_binary(
+                    io_lib:format("~p", [Reason]))
+            }),
+            send_sse_error(Req1, 502, <<"Failed to connect to upstream">>),
+            cowboy_req:stream_body(<<>>, fin, Req1),
+            {ok, Req1, State}
     end.
 
-stream_loop(Req, State, FsmPid) ->
+%% Wait for FSM to send stream_headers or stream_error, sending keepalive every 15s.
+wait_for_stream_start(Req, State, FsmPid, LogCtx) ->
+    receive
+        {stream_headers, FsmPid, _Status, _RespHeaders} ->
+            %% Response headers already sent; transition to streaming data
+            stream_loop(Req, State, FsmPid, LogCtx);
+        {stream_failover, FsmPid, _FailoverInfo} ->
+            %% Failover requested but we already committed to 200 — send error event
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 503,
+                error_type => <<"upstream">>,
+                error_message => <<"Upstream failover required">>
+            }),
+            send_sse_error(Req, 503, <<"Upstream failover required">>),
+            cowboy_req:stream_body(<<>>, fin, Req),
+            {ok, Req, State};
+        {stream_error, FsmPid, {upstream_error, ErrStatus, _ErrHeaders, ErrBody}} ->
+            %% Already committed to 200 — send error as SSE event
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => ErrStatus,
+                error_type => <<"upstream">>,
+                error_message => ErrBody
+            }),
+            ErrMsg = case jsx:is_json(ErrBody) of
+                true -> ErrBody;
+                false -> jsx:encode(#{status => ErrStatus, message => <<"Upstream error">>})
+            end,
+            SseEvent = <<"event: error\ndata: ", ErrMsg/binary, "\n\n">>,
+            cowboy_req:stream_body(SseEvent, nofin, Req),
+            cowboy_req:stream_body(<<>>, fin, Req),
+            {ok, Req, State};
+        {stream_error, FsmPid, Reason} ->
+            logger:error("Stream connect error: ~p", [Reason]),
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 502,
+                error_type => <<"connection">>,
+                error_message => iolist_to_binary(
+                    io_lib:format("~p", [Reason]))
+            }),
+            send_sse_error(Req, 502, <<"Upstream streaming failed">>),
+            cowboy_req:stream_body(<<>>, fin, Req),
+            {ok, Req, State}
+    after 15000 ->
+        %% Send SSE comment keepalive to prevent proxy timeout
+        cowboy_req:stream_body(<<": keepalive\n\n">>, nofin, Req),
+        wait_for_stream_start(Req, State, FsmPid, LogCtx)
+    end.
+
+%% Send an SSE error event to the client (used when we already committed to 200)
+send_sse_error(Req, Status, Message) ->
+    ErrorJson = jsx:encode(#{
+        type => <<"api_error">>,
+        status => Status,
+        message => Message
+    }),
+    SseEvent = <<"event: error\ndata: ", ErrorJson/binary, "\n\n">>,
+    cowboy_req:stream_body(SseEvent, nofin, Req).
+
+stream_loop(Req, State, FsmPid, LogCtx) ->
     receive
         {stream_chunk, FsmPid, Chunk} ->
             cowboy_req:stream_body(Chunk, nofin, Req),
-            stream_loop(Req, State, FsmPid);
+            stream_loop(Req, State, FsmPid, LogCtx);
         {stream_done, FsmPid, _Accumulated} ->
             cowboy_req:stream_body(<<>>, fin, Req),
             {ok, Req, State};
         {stream_error, FsmPid, Reason} ->
             logger:error("Mid-stream error: ~p", [Reason]),
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 502,
+                error_type => <<"stream">>,
+                error_message => iolist_to_binary(
+                    io_lib:format("~p", [Reason]))
+            }),
             cowboy_req:stream_body(<<>>, fin, Req),
             {ok, Req, State}
     after 600000 ->
@@ -449,6 +640,24 @@ compute_session_hash(Parsed) ->
     end,
     Data = <<SystemPrompt/binary, FirstMsg/binary>>,
     binary:encode_hex(crypto:hash(sha256, Data)).
+
+strip_thinking_signatures(Body) when is_binary(Body) ->
+    try
+        Json = jsx:decode(Body, [return_maps]),
+        Messages = maps:get(<<"messages">>, Json, []),
+        CleanMessages = lists:map(fun strip_msg_signatures/1, Messages),
+        jsx:encode(Json#{<<"messages">> => CleanMessages})
+    catch _:_ -> Body
+    end.
+
+strip_msg_signatures(#{<<"content">> := Content} = Msg) when is_list(Content) ->
+    CleanContent = lists:map(fun
+        (#{<<"type">> := <<"thinking">>, <<"signature">> := _} = Block) ->
+            maps:remove(<<"signature">>, Block);
+        (Other) -> Other
+    end, Content),
+    Msg#{<<"content">> => CleanContent};
+strip_msg_signatures(Msg) -> Msg.
 
 parse_url(Url) when is_binary(Url) ->
     parse_url(binary_to_list(Url));

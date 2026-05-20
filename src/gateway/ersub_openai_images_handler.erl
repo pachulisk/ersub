@@ -30,12 +30,17 @@ handle_post(Req0, State) ->
 
 do_pipeline(Req0, State, AuthCtx) ->
     #{user_id := UserId} = AuthCtx,
+    ContentType = cowboy_req:header(<<"content-type">>, Req0, <<>>),
+    IsMultipart = case ContentType of
+        <<"multipart/", _/binary>> -> true;
+        _ -> false
+    end,
     case cowboy_req:read_body(Req0, #{length => 16777216}) of %% 16MB limit for images
         {ok, Body, Req1} ->
-            case jsx:is_json(Body) of
-                false ->
-                    {ok, reply_json(400, #{error => #{message => <<"Invalid JSON">>}}, Req1), State};
+            case IsMultipart of
                 true ->
+                    %% Bug #2251: Multipart form data (image edits with mask).
+                    %% Forward raw body without JSON validation.
                     case ersub_billing_srv:check_balance(UserId, 0.01) of
                         {error, insufficient_balance} ->
                             {ok, reply_json(402, #{error => #{message => <<"Insufficient balance">>}}, Req1), State};
@@ -47,7 +52,27 @@ do_pipeline(Req0, State, AuthCtx) ->
                                 {error, no_available_account} ->
                                     {ok, reply_json(503, #{error => #{message => <<"No accounts">>}}, Req1), State};
                                 {ok, Account} ->
-                                    forward(Req1, State, Account, Body, AuthCtx)
+                                    forward(Req1, State, Account, Body, AuthCtx, ContentType)
+                            end
+                    end;
+                false ->
+                    case jsx:is_json(Body) of
+                        false ->
+                            {ok, reply_json(400, #{error => #{message => <<"Invalid JSON">>}}, Req1), State};
+                        true ->
+                            case ersub_billing_srv:check_balance(UserId, 0.01) of
+                                {error, insufficient_balance} ->
+                                    {ok, reply_json(402, #{error => #{message => <<"Insufficient balance">>}}, Req1), State};
+                                ok ->
+                                    case ersub_scheduler_srv:select_account(#{
+                                        user_id => UserId, platform => <<"openai">>,
+                                        session_hash => <<>>, model => <<"dall-e">>
+                                    }) of
+                                        {error, no_available_account} ->
+                                            {ok, reply_json(503, #{error => #{message => <<"No accounts">>}}, Req1), State};
+                                        {ok, Account} ->
+                                            forward(Req1, State, Account, Body, AuthCtx, <<"application/json">>)
+                                    end
                             end
                     end
             end;
@@ -55,7 +80,7 @@ do_pipeline(Req0, State, AuthCtx) ->
             {ok, reply_json(400, #{error => #{message => <<"Read failed">>}}, Req0), State}
     end.
 
-forward(Req0, State, Account, Body, AuthCtx) ->
+forward(Req0, State, Account, Body, AuthCtx, ReqContentType) ->
     #{credentials := Creds, base_url := BaseUrl0} = Account,
     ApiKey = maps:get(<<"api_key">>, Creds, maps:get(api_key, Creds, <<>>)),
     DefaultUrl = maps:get(<<"base-url">>, ersub_clips_config:get_platform(<<"openai">>), <<"https://api.openai.com">>),
@@ -68,9 +93,10 @@ forward(Req0, State, Account, Body, AuthCtx) ->
         _ -> <<"/v1/images/generations">>
     end,
     Url = <<BaseUrl/binary, UpstreamPath/binary>>,
-    Headers = [{<<"content-type">>, <<"application/json">>},
+    %% Bug #2251/#2277: Use original content-type for multipart requests
+    Headers = [{<<"content-type">>, ReqContentType},
                {<<"authorization">>, <<"Bearer ", ApiKey/binary>>}],
-    case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}, 120000) of
+    case ersub_upstream_pool:request(<<"POST">>, Url, Headers, Body, #{}, 180000) of
         {ok, Status, RespHeaders, RespBody} ->
             case Status of
                 S when S >= 200, S < 300 ->

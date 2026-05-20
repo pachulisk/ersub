@@ -66,7 +66,10 @@ do_pipeline(Req0, State, AuthCtx) ->
                 message => Reason
             }}, Req1),
             {ok, Req, State};
-        {ok, Parsed, Body, Req1} ->
+        {ok, Parsed, _Body, Req1} ->
+            %% Strip service_tier to avoid 400 from Codex/Responses endpoint
+            CleanParsed = maps:without([<<"service_tier">>], Parsed),
+            CleanBody = jsx:encode(CleanParsed),
             case ersub_billing_srv:check_balance(UserId, 0.001) of
                 {error, insufficient_balance} ->
                     Req = reply_json(402, #{error => #{
@@ -75,7 +78,7 @@ do_pipeline(Req0, State, AuthCtx) ->
                     }}, Req1),
                     {ok, Req, State};
                 ok ->
-                    Model = maps:get(<<"model">>, Parsed, <<>>),
+                    Model = maps:get(<<"model">>, CleanParsed, <<>>),
                     SchedulerReq = #{
                         user_id => UserId,
                         platform => <<"openai">>,
@@ -90,7 +93,7 @@ do_pipeline(Req0, State, AuthCtx) ->
                             }}, Req1),
                             {ok, Req, State};
                         {ok, Account} ->
-                            forward_to_openai(Req1, State, Account, Parsed, Body, AuthCtx)
+                            forward_to_openai(Req1, State, Account, CleanParsed, CleanBody, AuthCtx)
                     end
             end
     end.
@@ -112,14 +115,31 @@ forward_to_openai(Req0, State, Account, Parsed, Body, AuthCtx) ->
     case IsStream of
         true ->
             ConnInfo = parse_url_to_map(Url),
+            {PeerIP, _PeerPort} = cowboy_req:peer(Req0),
+            IPBin = list_to_binary(inet:ntoa(PeerIP)),
             Opts = #{account_id => maps:get(id, Account, 0),
                      request_id => generate_request_id(),
-                     model => maps:get(<<"model">>, Parsed, <<>>)},
+                     model => maps:get(<<"model">>, Parsed, <<>>),
+                     user_id => maps:get(user_id, AuthCtx, undefined),
+                     key_id => maps:get(key_id, AuthCtx, undefined),
+                     ip_address => IPBin},
+            LogCtx = #{
+                user_id => maps:get(user_id, AuthCtx, null),
+                account_id => maps:get(id, Account, 0),
+                platform => <<"openai">>,
+                model => maps:get(<<"model">>, Parsed, <<>>)
+            },
             case ersub_stream_fsm:start(ConnInfo, Headers, Body, Opts) of
                 {ok, FsmPid} ->
-                    handle_stream(Req0, State, FsmPid);
+                    handle_stream(Req0, State, FsmPid, LogCtx);
                 {error, Reason} ->
                     logger:error("OpenAI stream failed: ~p", [Reason]),
+                    ersub_system_log:log_request_error(LogCtx#{
+                        status_code => 502,
+                        error_type => <<"connection">>,
+                        error_message => iolist_to_binary(
+                            io_lib:format("~p", [Reason]))
+                    }),
                     Req = reply_json(502, #{error => #{
                         type => <<"api_error">>,
                         message => <<"Upstream connection failed">>
@@ -134,13 +154,32 @@ forward_to_openai(Req0, State, Account, Parsed, Body, AuthCtx) ->
                             Model = maps:get(<<"model">>, Parsed, <<>>),
                             ersub_billing_helper:record_non_streaming_usage(
                                 AuthCtx, maps:get(id, Account, 0), RespBody, Model);
-                        _ -> ok
+                        _ ->
+                            ersub_system_log:log_request_error(#{
+                                user_id => maps:get(user_id, AuthCtx, null),
+                                account_id => maps:get(id, Account, null),
+                                platform => <<"openai">>,
+                                model => maps:get(<<"model">>, Parsed, <<>>),
+                                status_code => Status,
+                                error_type => <<"upstream">>,
+                                error_message => RespBody
+                            })
                     end,
                     Filtered = filter_headers(RespHeaders),
                     Req = cowboy_req:reply(Status, Filtered, RespBody, Req0),
                     {ok, Req, State};
                 {error, Reason} ->
                     logger:error("OpenAI request failed: ~p", [Reason]),
+                    ersub_system_log:log_request_error(#{
+                        user_id => maps:get(user_id, AuthCtx, null),
+                        account_id => maps:get(id, Account, null),
+                        platform => <<"openai">>,
+                        model => maps:get(<<"model">>, Parsed, <<>>),
+                        status_code => 502,
+                        error_type => <<"connection">>,
+                        error_message => iolist_to_binary(
+                            io_lib:format("~p", [Reason]))
+                    }),
                     Req = reply_json(502, #{error => #{
                         type => <<"api_error">>,
                         message => <<"Upstream request failed">>
@@ -149,7 +188,7 @@ forward_to_openai(Req0, State, Account, Parsed, Body, AuthCtx) ->
             end
     end.
 
-handle_stream(Req0, State, FsmPid) ->
+handle_stream(Req0, State, FsmPid, LogCtx) ->
     receive
         {stream_headers, FsmPid, _Status, RespHeaders} ->
             Filtered = filter_headers(maps:from_list(RespHeaders)),
@@ -158,14 +197,25 @@ handle_stream(Req0, State, FsmPid) ->
                 <<"cache-control">> => <<"no-cache">>
             },
             Req1 = cowboy_req:stream_reply(200, StreamHeaders, Req0),
-            stream_loop(Req1, State, FsmPid);
+            stream_loop(Req1, State, FsmPid, LogCtx);
         {stream_error, FsmPid, {upstream_error, ErrStatus, _, ErrBody}} ->
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => ErrStatus,
+                error_type => <<"upstream">>,
+                error_message => ErrBody
+            }),
             Req = cowboy_req:reply(ErrStatus,
                 #{<<"content-type">> => <<"application/json">>},
                 ErrBody, Req0),
             {ok, Req, State};
         {stream_error, FsmPid, Reason} ->
             logger:error("OpenAI stream error: ~p", [Reason]),
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 502,
+                error_type => <<"connection">>,
+                error_message => iolist_to_binary(
+                    io_lib:format("~p", [Reason]))
+            }),
             Req = reply_json(502, #{error => #{
                 type => <<"api_error">>,
                 message => <<"Upstream streaming failed">>
@@ -173,6 +223,11 @@ handle_stream(Req0, State, FsmPid) ->
             {ok, Req, State}
     after 30000 ->
         catch ersub_stream_fsm:stop(FsmPid),
+        ersub_system_log:log_request_error(LogCtx#{
+            status_code => 504,
+            error_type => <<"timeout">>,
+            error_message => <<"Upstream timeout">>
+        }),
         Req = reply_json(504, #{error => #{
             type => <<"api_error">>,
             message => <<"Upstream timeout">>
@@ -180,15 +235,21 @@ handle_stream(Req0, State, FsmPid) ->
         {ok, Req, State}
     end.
 
-stream_loop(Req, State, FsmPid) ->
+stream_loop(Req, State, FsmPid, LogCtx) ->
     receive
         {stream_chunk, FsmPid, Chunk} ->
             cowboy_req:stream_body(Chunk, nofin, Req),
-            stream_loop(Req, State, FsmPid);
+            stream_loop(Req, State, FsmPid, LogCtx);
         {stream_done, FsmPid, _} ->
             cowboy_req:stream_body(<<>>, fin, Req),
             {ok, Req, State};
-        {stream_error, FsmPid, _} ->
+        {stream_error, FsmPid, Reason} ->
+            ersub_system_log:log_request_error(LogCtx#{
+                status_code => 502,
+                error_type => <<"stream">>,
+                error_message => iolist_to_binary(
+                    io_lib:format("~p", [Reason]))
+            }),
             cowboy_req:stream_body(<<>>, fin, Req),
             {ok, Req, State}
     after 600000 ->

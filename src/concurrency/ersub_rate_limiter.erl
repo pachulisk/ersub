@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([check_rpm/3, reset/2]).
+-export([check_rpm/3, check_endpoint_rate/2, reset/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -define(SERVER, ?MODULE).
@@ -33,6 +33,29 @@ check_rpm(Type, Id, Limit) ->
             %% Filter to current window
             Active = [T || T <- Timestamps, Now - T < ?WINDOW_MS],
             case length(Active) >= Limit of
+                true ->
+                    {error, rate_limited};
+                false ->
+                    ets:insert(?TABLE, {Key, [Now | Active]}),
+                    ok
+            end;
+        [] ->
+            ets:insert(?TABLE, {Key, [Now]}),
+            ok
+    end.
+
+%% Check rate limit for a specific endpoint type (e.g., login, register).
+%% Uses a separate ETS key namespace: {endpoint_rate, EndpointType, Identifier}
+-spec check_endpoint_rate(atom(), binary()) -> ok | {error, rate_limited}.
+check_endpoint_rate(EndpointType, Identifier) ->
+    {MaxRequests, WindowSec} = endpoint_limits(EndpointType),
+    WindowMs = WindowSec * 1000,
+    Now = erlang:monotonic_time(millisecond),
+    Key = {endpoint_rate, EndpointType, Identifier},
+    case ets:lookup(?TABLE, Key) of
+        [{_, Timestamps}] ->
+            Active = [T || T <- Timestamps, Now - T < WindowMs],
+            case length(Active) >= MaxRequests of
                 true ->
                     {error, rate_limited};
                 false ->
@@ -78,10 +101,27 @@ cleanup_expired() ->
     Now = erlang:monotonic_time(millisecond),
     %% Iterate all entries and remove stale timestamps
     ets:foldl(fun({Key, Timestamps}, Acc) ->
-        Active = [T || T <- Timestamps, Now - T < ?WINDOW_MS],
+        Window = window_for_key(Key),
+        Active = [T || T <- Timestamps, Now - T < Window],
         case Active of
             [] -> ets:delete(?TABLE, Key);
             _ -> ets:insert(?TABLE, {Key, Active})
         end,
         Acc
     end, 0, ?TABLE).
+
+%% Per-endpoint-type limits: {MaxRequests, WindowSeconds}
+endpoint_limits(login)          -> {10, 300};
+endpoint_limits(register)       -> {3, 600};
+endpoint_limits(oauth)          -> {10, 300};
+endpoint_limits(verify_code)    -> {5, 300};
+endpoint_limits(password_reset) -> {3, 600};
+endpoint_limits(_Default)       -> {60, 60}.
+
+%% Return the correct window (in ms) for a given ETS key so cleanup
+%% does not prune timestamps that are still within the active window.
+window_for_key({endpoint_rate, EndpointType, _}) ->
+    {_, WindowSec} = endpoint_limits(EndpointType),
+    WindowSec * 1000;
+window_for_key(_) ->
+    ?WINDOW_MS.

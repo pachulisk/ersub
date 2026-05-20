@@ -86,7 +86,13 @@ payment:
     secret_key: "${STRIPE_SECRET_KEY}"
     webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
   alipay:
-    app_id: ""
+    app_id: "${ALIPAY_APP_ID}"
+    private_key: "${ALIPAY_PRIVATE_KEY}"
+    public_key: "${ALIPAY_PUBLIC_KEY}"
+    notify_url: "${ALIPAY_NOTIFY_URL}"
+    return_url: "${ALIPAY_RETURN_URL}"
+  alipay_success_url: "${ALIPAY_SUCCESS_URL}"
+  stripe_success_url: "${STRIPE_SUCCESS_URL}"
   wechat:
     mch_id: ""
 

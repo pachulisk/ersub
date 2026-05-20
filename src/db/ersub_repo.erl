@@ -30,6 +30,9 @@
 %% Settings
 -export([get_setting/1, upsert_setting/2]).
 
+%% Proxy checks
+-export([has_disabled_proxy/1]).
+
 %% Generic query helper
 -export([query/2, squery/1]).
 
@@ -153,6 +156,23 @@ update_account(Id, Fields) ->
 
 delete_account(Id) ->
     query("DELETE FROM accounts WHERE id = $1", [Id]).
+
+%% Check if an account references a disabled proxy.
+%% Returns true if the account's credentials or base_url contains a URL
+%% from a proxy with is_active = FALSE.
+-spec has_disabled_proxy(integer()) -> boolean().
+has_disabled_proxy(AccountId) ->
+    case query(
+        "SELECT EXISTS("
+        "  SELECT 1 FROM proxies p, accounts a"
+        "  WHERE a.id = $1"
+        "  AND p.is_active = FALSE"
+        "  AND (a.credentials::text LIKE '%' || p.url || '%'"
+        "       OR a.base_url = p.url)"
+        ")", [AccountId]) of
+        {ok, _, [{true}]} -> true;
+        _ -> false
+    end.
 
 %%% API Key operations
 

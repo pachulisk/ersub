@@ -8,6 +8,7 @@ routes() ->
             %% Gateway endpoints (no /api/v1 prefix — these are the proxy)
             {"/v1/models/[...]", ersub_models_handler, []},
             {"/v1/models", ersub_models_handler, []},
+            {"/v1/messages/count_tokens", ersub_claude_handler, [count_tokens]},
             {"/v1/messages", ersub_claude_handler, []},
             {"/openai/v1/chat/completions", ersub_openai_handler, []},
             {"/openai/v1/responses", ersub_openai_responses_handler, []},
@@ -17,11 +18,28 @@ routes() ->
             {"/openai/v1/images/edits", ersub_openai_images_handler, []},
             {"/gemini/v1beta/[...]", ersub_gemini_handler, []},
             {"/antigravity/v1/messages", ersub_antigravity_handler, []},
+            {"/antigravity/v1beta/[...]", ersub_gemini_handler, []},
+            {"/antigravity/models", ersub_models_handler, []},
+            {"/antigravity/v1/models", ersub_models_handler, []},
+            {"/antigravity/v1/usage", ersub_user_handler, []},
+
+            %% Gateway route aliases (sub2api compatibility)
+            {"/chat/completions", ersub_openai_handler, []},
+            {"/responses", ersub_openai_responses_handler, []},
+            {"/responses/[...]", ersub_openai_responses_handler, []},
+            {"/v1/chat/completions", ersub_openai_handler, []},
+            {"/v1/images/generations", ersub_openai_images_handler, []},
+            {"/v1/images/edits", ersub_openai_images_handler, []},
+            {"/backend-api/codex/responses", ersub_openai_responses_handler, []},
+            {"/backend-api/codex/responses/[...]", ersub_openai_responses_handler, []},
 
             %% Management API — /api/v1 prefix (sub2api frontend compatible)
             {"/api/v1/user/[...]", ersub_user_handler, []},
             {"/api/v1/keys/[...]", ersub_keys_handler, []},
             {"/api/v1/usage/[...]", ersub_user_handler, []},
+            {"/api/v1/subscriptions/[...]", ersub_user_handler, []},
+            {"/api/v1/redeem/[...]", ersub_user_handler, []},
+            {"/api/v1/groups/[...]", ersub_user_handler, []},
             {"/api/v1/admin/[...]", ersub_admin_handler, []},
             {"/api/v1/payment/[...]", ersub_payment_handler, []},
             {"/api/v1/auth/[...]", ersub_auth_handler, []},
@@ -41,6 +59,9 @@ routes() ->
 
             %% Custom Markdown pages
             {"/pages/:slug", ersub_page_handler, []},
+
+            %% Event logging batch (stub)
+            {"/api/event_logging/batch", ersub_health_handler, [event_logging]},
 
             %% Health check
             {"/health", ersub_health_handler, []},

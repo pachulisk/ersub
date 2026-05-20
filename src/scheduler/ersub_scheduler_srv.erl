@@ -57,7 +57,12 @@ try_selection_layer(<<"previous_response_id">>, UserId, ExcludedIds, Req) ->
     case PrevRespId =/= <<>> andalso ersub_session_srv:lookup(UserId, PrevRespId) of
         {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
             case get_account_if_schedulable(AccountId) of
-                {ok, Account} -> {ok, Account};
+                {ok, Account} ->
+                    UserGroups = get_user_group_ids(UserId),
+                    case account_matches_user_groups(AccountId, UserGroups) of
+                        true -> {ok, Account};
+                        false -> miss
+                    end;
                 _ -> miss
             end;
         _ -> miss
@@ -67,7 +72,12 @@ try_selection_layer(<<"session_hash">>, UserId, ExcludedIds, Req) ->
     case SessionHash =/= <<>> andalso ersub_session_srv:lookup(UserId, SessionHash) of
         {ok, AccountId} when not is_map_key(AccountId, ExcludedIds) ->
             case get_account_if_schedulable(AccountId) of
-                {ok, Account} -> {ok, Account};
+                {ok, Account} ->
+                    UserGroups = get_user_group_ids(UserId),
+                    case account_matches_user_groups(AccountId, UserGroups) of
+                        true -> {ok, Account};
+                        false -> miss
+                    end;
                 _ -> miss
             end;
         _ -> miss
@@ -166,21 +176,27 @@ select_by_score(Req) ->
     _ = bump_counter(lb_select),
     Platform = maps:get(platform, Req, undefined),
     ExcludedIds = maps:get(excluded_ids, Req, #{}),
+    UserId = maps:get(user_id, Req, undefined),
+    UserGroups = get_user_group_ids(UserId),
     case ersub_platform_sup:list_accounts() of
         [] ->
-            select_from_db(Platform, ExcludedIds);
+            select_from_db(Platform, ExcludedIds, UserGroups);
         AccountIds ->
             Candidates = lists:filtermap(fun(Id) ->
                 case is_map_key(Id, ExcludedIds) of
                     true -> false;
                     false ->
-                        try
-                            Stats = ersub_account_srv:get_stats(Id),
-                            case maps:get(status, Stats) =:= active of
-                                true -> {true, Stats};
-                                false -> false
-                            end
-                        catch _:_ -> false
+                        case account_matches_user_groups(Id, UserGroups) of
+                            false -> false;
+                            true ->
+                                try
+                                    Stats = ersub_account_srv:get_stats(Id),
+                                    case maps:get(status, Stats) =:= active of
+                                        true -> {true, Stats};
+                                        false -> false
+                                    end
+                                catch _:_ -> false
+                                end
                         end
                 end
             end, AccountIds),
@@ -231,7 +247,7 @@ select_via_clips(Candidates) ->
             {error, no_available_account}
     end.
 
-select_from_db(Platform, ExcludedIds) ->
+select_from_db(Platform, ExcludedIds, UserGroups) ->
     Filters = case Platform of
         undefined -> #{status => <<"active">>};
         P -> #{status => <<"active">>, platform => P}
@@ -240,7 +256,9 @@ select_from_db(Platform, ExcludedIds) ->
         {ok, Accounts} ->
             Available = [A || A <- Accounts,
                          not is_map_key(maps:get(id, A), ExcludedIds),
-                         maps:get(schedulable, A, true) =:= true],
+                         maps:get(schedulable, A, true) =:= true,
+                         not ersub_repo:has_disabled_proxy(maps:get(id, A)),
+                         account_matches_user_groups(maps:get(id, A), UserGroups)],
             case Available of
                 [] -> {error, no_available_account};
                 [First | _] -> ersub_repo:get_account(maps:get(id, First))
@@ -252,7 +270,12 @@ select_from_db(Platform, ExcludedIds) ->
 get_account_if_schedulable(AccountId) ->
     try
         case ersub_account_srv:is_schedulable(AccountId) of
-            true -> get_full_account(AccountId);
+            true ->
+                %% Skip accounts whose proxy is disabled
+                case ersub_repo:has_disabled_proxy(AccountId) of
+                    true -> {error, proxy_disabled};
+                    false -> get_full_account(AccountId)
+                end;
             false -> {error, not_schedulable}
         end
     catch _:_ ->
@@ -274,6 +297,25 @@ pick_weighted_random(Candidates) ->
     %% Simple: uniform random from top-k
     Idx = rand:uniform(length(Candidates)),
     lists:nth(Idx, Candidates).
+
+%% Get group IDs that a user is allowed to access.
+get_user_group_ids(undefined) -> [];
+get_user_group_ids(UserId) ->
+    case ersub_repo:list_user_groups(UserId) of
+        {ok, Groups} -> [maps:get(id, G) || G <- Groups];
+        _ -> []
+    end.
+
+%% Check if an account belongs to at least one of the user's allowed groups.
+%% If user has no groups (empty list), no account matches.
+%% If account has no group bindings, it also does not match.
+account_matches_user_groups(_AccountId, []) -> false;
+account_matches_user_groups(AccountId, UserGroupIds) ->
+    case ersub_repo:list_account_groups(AccountId) of
+        {ok, AccountGroupIds} ->
+            lists:any(fun(G) -> lists:member(G, UserGroupIds) end, AccountGroupIds);
+        _ -> false
+    end.
 
 bump_counter(Key) ->
     try ets:update_counter(?METRICS_TABLE, Key, {2, 1})

@@ -1,7 +1,7 @@
 -module(ersub_auth_middleware).
 
 -export([authenticate/1, hash_api_key/1, init_cache/0, reply_error/3,
-         check_group_assignment/1]).
+         check_group_assignment/1, check_backend_mode/2]).
 
 %% ETS table for API key cache
 -define(KEY_CACHE, ersub_api_key_cache).
@@ -150,6 +150,28 @@ reply_error(Req, StatusCode, Message) ->
     cowboy_req:reply(StatusCode,
         #{<<"content-type">> => <<"application/json">>},
         Body, Req).
+
+%% Check backend mode guard.
+%% Returns allow or {deny, Reason} based on current backend_mode setting.
+-spec check_backend_mode(cowboy_req:req(), map()) -> allow | {deny, binary()}.
+check_backend_mode(Req, AuthCtx) ->
+    case ersub_config_srv:get(backend_mode, <<"standard">>) of
+        <<"standard">> ->
+            allow;
+        <<"backend">> ->
+            Path = cowboy_req:path(Req),
+            IsAdminPath = case Path of
+                <<"/api/v1/admin/", _/binary>> -> true;
+                _ -> false
+            end,
+            IsAdminUser = maps:get(user_role, AuthCtx, <<>>) =:= <<"admin">>,
+            case IsAdminPath orelse IsAdminUser of
+                true -> allow;
+                false -> {deny, <<"Backend mode active. Only admin access allowed.">>}
+            end;
+        _ ->
+            allow
+    end.
 
 bin_to_hex(Bin) ->
     list_to_binary([io_lib:format("~2.16.0b", [B]) || <<B>> <= Bin]).

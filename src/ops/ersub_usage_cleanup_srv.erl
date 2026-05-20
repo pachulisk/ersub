@@ -32,6 +32,24 @@ handle_info(cleanup, State) ->
     %% Clean billing dedup archive
     ersub_repo:squery(
         "DELETE FROM usage_billing_dedup WHERE billed_at < NOW() - INTERVAL '7 days'"),
+    %% Clean system logs, request errors, and channel monitor histories
+    DaysStr = integer_to_list(Days),
+    DaysInterval = list_to_binary(DaysStr ++ " days"),
+    lists:foreach(fun({Table, Col}) ->
+        Q = iolist_to_binary([
+            "DELETE FROM ", Table,
+            " WHERE ", Col, " < NOW() - '", DaysInterval, "'::interval"
+        ]),
+        case ersub_repo:squery(binary_to_list(Q)) of
+            {ok, Deleted, _, _} when is_integer(Deleted), Deleted > 0 ->
+                logger:info("Cleaned ~p rows from ~s older than ~p days", [Deleted, Table, Days]);
+            _ -> ok
+        end
+    end, [
+        {<<"ops_system_logs">>, <<"created_at">>},
+        {<<"ops_request_errors">>, <<"created_at">>},
+        {<<"channel_monitor_histories">>, <<"checked_at">>}
+    ]),
     schedule_cleanup(),
     {noreply, State}.
 

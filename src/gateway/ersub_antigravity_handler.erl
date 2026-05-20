@@ -139,7 +139,7 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
 
     case IsStream of
         true ->
-            handle_streaming(Req0, State, Url, Headers, OrigBody, Account);
+            handle_streaming(Req0, State, Url, Headers, OrigBody, Account, AuthCtx);
         _ ->
             case http_request(Url, Headers, OrigBody) of
                 {ok, Status, RespHeaders, RespBody} ->
@@ -165,11 +165,16 @@ do_forward(Req0, State, Account, Parsed, OrigBody, AuthCtx) ->
 
 %%% Streaming
 
-handle_streaming(Req0, State, Url, Headers, Body, Account) ->
+handle_streaming(Req0, State, Url, Headers, Body, Account, AuthCtx) ->
     ConnInfo = parse_url_to_conn_info(Url),
     AccountId = maps:get(id, Account, 0),
     ReqId = generate_request_id(),
-    Opts = #{account_id => AccountId, request_id => ReqId, model => <<"unknown">>},
+    {PeerIP, _PeerPort} = cowboy_req:peer(Req0),
+    IPBin = list_to_binary(inet:ntoa(PeerIP)),
+    Opts = #{account_id => AccountId, request_id => ReqId, model => <<"unknown">>,
+             user_id => maps:get(user_id, AuthCtx, undefined),
+             key_id => maps:get(key_id, AuthCtx, undefined),
+             ip_address => IPBin},
     case ersub_stream_fsm:start(ConnInfo, Headers, Body, Opts) of
         {ok, FsmPid} ->
             receive

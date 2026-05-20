@@ -33,6 +33,7 @@
 
 (deffacts default-retriable-codes
     (retriable-code (code 429) (reason "rate_limited"))
+    (retriable-code (code 500) (reason "internal_server_error"))
     (retriable-code (code 502) (reason "bad_gateway"))
     (retriable-code (code 503) (reason "service_unavailable"))
     (retriable-code (code 529) (reason "overloaded"))

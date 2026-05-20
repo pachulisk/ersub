@@ -55,6 +55,77 @@ handle(<<"POST">>, undefined, Req0, State, UserId) ->
             {ok, Req, State}
     end;
 
+%% GET /api/keys/:id — get single key
+handle(<<"GET">>, [IdBin], Req0, State, UserId) ->
+    Id = binary_to_integer(IdBin),
+    case ersub_repo:query(
+        "SELECT id, key_prefix, name, rpm_limit, max_concurrency, "
+        "ip_whitelist, ip_blacklist, is_active, expires_at, created_at "
+        "FROM api_keys WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+        [Id, UserId])
+    of
+        {ok, _, [{KId, KP, N, RPM, MC, IW, IB, Active, Exp, CA}]} ->
+            Req = reply_json(200, #{data => #{
+                id => KId, key_prefix => KP, name => N,
+                rpm_limit => RPM, max_concurrency => MC,
+                ip_whitelist => IW, ip_blacklist => IB,
+                is_active => Active, expires_at => Exp,
+                created_at => CA
+            }}, Req0),
+            {ok, Req, State};
+        {ok, _, []} ->
+            Req = reply_json(404, #{error => #{
+                message => <<"Key not found">>
+            }}, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            Req = reply_json(500, #{error => format_error(Reason)}, Req0),
+            {ok, Req, State}
+    end;
+
+%% PUT /api/keys/:id — update key
+handle(<<"PUT">>, [IdBin], Req0, State, UserId) ->
+    Id = binary_to_integer(IdBin),
+    %% Verify ownership
+    case ersub_repo:query(
+        "SELECT user_id FROM api_keys WHERE id = $1 AND deleted_at IS NULL", [Id]
+    ) of
+        {ok, _, [{UserId}]} ->
+            %% Key belongs to this user, proceed with update
+            {ok, Body, Req1} = cowboy_req:read_body(Req0),
+            Params = jsx:decode(Body, [return_maps]),
+            Fields = build_key_update_fields(Params),
+            case map_size(Fields) of
+                0 ->
+                    Req = reply_json(400, #{error => #{
+                        message => <<"No valid fields to update">>
+                    }}, Req1),
+                    {ok, Req, State};
+                _ ->
+                    case ersub_repo:update_api_key(Id, Fields) of
+                        {ok, _} ->
+                            Req = reply_json(200, #{success => true}, Req1),
+                            {ok, Req, State};
+                        {error, Reason} ->
+                            Req = reply_json(500, #{error => format_error(Reason)}, Req1),
+                            {ok, Req, State}
+                    end
+            end;
+        {ok, _, [{_OtherUserId}]} ->
+            Req = reply_json(403, #{error => #{
+                message => <<"Key does not belong to you">>
+            }}, Req0),
+            {ok, Req, State};
+        {ok, _, []} ->
+            Req = reply_json(404, #{error => #{
+                message => <<"Key not found">>
+            }}, Req0),
+            {ok, Req, State};
+        {error, Reason} ->
+            Req = reply_json(500, #{error => format_error(Reason)}, Req0),
+            {ok, Req, State}
+    end;
+
 %% DELETE /api/keys/:id
 handle(<<"DELETE">>, [IdBin], Req0, State, _UserId) ->
     Id = binary_to_integer(IdBin),
@@ -97,3 +168,19 @@ auth_error_message(missing_token) -> <<"Missing Authorization header">>;
 auth_error_message(token_expired) -> <<"Token expired">>;
 auth_error_message(invalid_signature) -> <<"Invalid token">>;
 auth_error_message(_) -> <<"Authentication failed">>.
+
+build_key_update_fields(Params) ->
+    Mappings = [
+        {<<"name">>, name, fun(V) -> V end},
+        {<<"rpm_limit">>, rpm_limit, fun(V) -> V end},
+        {<<"concurrency_limit">>, max_concurrency, fun(V) -> V end},
+        {<<"ip_whitelist">>, ip_whitelist, fun(V) -> jsx:encode(V) end},
+        {<<"ip_blacklist">>, ip_blacklist, fun(V) -> jsx:encode(V) end},
+        {<<"expires_at">>, expires_at, fun(V) -> V end}
+    ],
+    lists:foldl(fun({JsonKey, DbKey, Transform}, Acc) ->
+        case maps:find(JsonKey, Params) of
+            {ok, Value} -> Acc#{DbKey => Transform(Value)};
+            error -> Acc
+        end
+    end, #{}, Mappings).
