@@ -128,100 +128,319 @@ handle(<<"POST">>, [<<"account-groups">>], Req0, State, _Claims) ->
         {error, Reason} -> reply_err(500, Reason, Req1, State)
     end;
 
-%% === Typed Settings (T4-10) ===
+%% === Bulk System Settings ===
+
+%% GET /api/v1/admin/settings
+handle(<<"GET">>, [<<"settings">>], Req0, State, _Claims) ->
+    DbMap = settings_load_all(),
+    Settings = assemble_system_settings(DbMap),
+    reply_ok(Settings, Req0, State);
+
+%% PUT /api/v1/admin/settings
+handle(<<"PUT">>, [<<"settings">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    case settings_upsert_batch(Params) of
+        ok ->
+            DbMap = settings_load_all(),
+            Settings = assemble_system_settings(DbMap),
+            reply_ok(Settings, Req1, State);
+        {error, Reason} ->
+            reply_err(500, Reason, Req1, State)
+    end;
+
+%% POST /api/v1/admin/settings/test-smtp
+handle(<<"POST">>, [<<"settings">>, <<"test-smtp">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Host = maps:get(<<"host">>, Params, <<>>),
+    Port = maps:get(<<"port">>, Params, 587),
+    Username = maps:get(<<"username">>, Params, <<>>),
+    Password = maps:get(<<"password">>, Params, <<>>),
+    UseTLS = maps:get(<<"use_tls">>, Params, false),
+    case {Host, Username, Password} of
+        {<<>>, _, _} -> reply_err(400, <<"host is required">>, Req1, State);
+        {_, <<>>, _} -> reply_err(400, <<"username is required">>, Req1, State);
+        {_, _, <<>>} -> reply_err(400, <<"password is required">>, Req1, State);
+        _ ->
+            PortInt = if is_integer(Port) -> Port; true -> 587 end,
+            case smtp_test_connection(Host, PortInt, UseTLS, Username, Password) of
+                ok ->
+                    reply_ok(#{message => <<"SMTP connection test successful">>}, Req1, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("~p", [Reason])),
+                    reply_err(500, ErrMsg, Req1, State)
+            end
+    end;
+
+%% POST /api/v1/admin/settings/send-test-email
+handle(<<"POST">>, [<<"settings">>, <<"send-test-email">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    ToEmail = maps:get(<<"email">>, Params, <<>>),
+    Host = maps:get(<<"host">>, Params, <<>>),
+    Port = maps:get(<<"port">>, Params, 587),
+    Username = maps:get(<<"username">>, Params, <<>>),
+    Password = maps:get(<<"password">>, Params, <<>>),
+    FromEmail = maps:get(<<"from_email">>, Params, Username),
+    FromName = maps:get(<<"from_name">>, Params, <<"ErSub">>),
+    UseTLS = maps:get(<<"use_tls">>, Params, false),
+    Validation = case {is_valid_email(ToEmail), Host, Username, Password} of
+        {false, _, _, _} -> {error, <<"Invalid email address">>};
+        {_, <<>>, _, _} -> {error, <<"host is required">>};
+        {_, _, <<>>, _} -> {error, <<"username is required">>};
+        {_, _, _, <<>>} -> {error, <<"password is required">>};
+        _ -> ok
+    end,
+    case Validation of
+        {error, VMsg} ->
+            reply_err(400, VMsg, Req1, State);
+        ok ->
+            PortInt = if is_integer(Port) -> Port; true -> 587 end,
+            case smtp_send_test_email(Host, PortInt, UseTLS, Username, Password, FromEmail, FromName, ToEmail) of
+                ok ->
+                    Msg = iolist_to_binary([<<"Test email sent to ">>, ToEmail]),
+                    reply_ok(#{message => Msg}, Req1, State);
+                {error, Reason} ->
+                    ErrMsg = iolist_to_binary(io_lib:format("~p", [Reason])),
+                    reply_err(500, ErrMsg, Req1, State)
+            end
+    end;
+
+%% === Operational Settings ===
 
 %% GET /api/v1/admin/settings/overload-cooldown
 handle(<<"GET">>, [<<"settings">>, <<"overload-cooldown">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_overload_cooldown_s">>, Req0, State);
+    Default = #{enabled => false, cooldown_minutes => 5},
+    Value = case ersub_repo:get_setting(<<"overload_cooldown_config">>) of
+        {ok, V} when is_map(V) -> V;
+        _ -> Default
+    end,
+    reply_ok(Value, Req0, State);
 
 %% PUT /api/v1/admin/settings/overload-cooldown
 handle(<<"PUT">>, [<<"settings">>, <<"overload-cooldown">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_overload_cooldown_s">>, Req0, State);
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Minutes = maps:get(<<"cooldown_minutes">>, Params, 0),
+    case is_integer(Minutes) andalso Minutes >= 1 of
+        false ->
+            reply_err(400, <<"cooldown_minutes must be >= 1">>, Req1, State);
+        true ->
+            Value = #{enabled => maps:get(<<"enabled">>, Params, false),
+                      cooldown_minutes => Minutes},
+            case ersub_repo:upsert_setting(<<"overload_cooldown_config">>, Value) of
+                {ok, _} -> reply_ok(Value, Req1, State);
+                {error, Reason} -> reply_err(500, Reason, Req1, State)
+            end
+    end;
 
-%% GET /api/v1/admin/settings/rate-limit-cooldown
-handle(<<"GET">>, [<<"settings">>, <<"rate-limit-cooldown">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_rate_limit_cooldown_s">>, Req0, State);
+%% GET /api/v1/admin/settings/rate-limit-429-cooldown
+handle(<<"GET">>, [<<"settings">>, <<"rate-limit-429-cooldown">>], Req0, State, _Claims) ->
+    Default = #{enabled => false, cooldown_seconds => 60},
+    Value = case ersub_repo:get_setting(<<"rate_limit_429_cooldown">>) of
+        {ok, V} when is_map(V) -> V;
+        _ -> Default
+    end,
+    reply_ok(Value, Req0, State);
 
-%% PUT /api/v1/admin/settings/rate-limit-cooldown
-handle(<<"PUT">>, [<<"settings">>, <<"rate-limit-cooldown">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_rate_limit_cooldown_s">>, Req0, State);
+%% PUT /api/v1/admin/settings/rate-limit-429-cooldown
+handle(<<"PUT">>, [<<"settings">>, <<"rate-limit-429-cooldown">>], Req0, State, _Claims) ->
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Seconds = maps:get(<<"cooldown_seconds">>, Params, 0),
+    case is_integer(Seconds) andalso Seconds >= 1 andalso Seconds =< 3600 of
+        false ->
+            reply_err(400, <<"cooldown_seconds must be between 1 and 3600">>, Req1, State);
+        true ->
+            Value = #{enabled => maps:get(<<"enabled">>, Params, false),
+                      cooldown_seconds => Seconds},
+            case ersub_repo:upsert_setting(<<"rate_limit_429_cooldown">>, Value) of
+                {ok, _} -> reply_ok(Value, Req1, State);
+                {error, Reason} -> reply_err(500, Reason, Req1, State)
+            end
+    end;
 
 %% GET /api/v1/admin/settings/stream-timeout
 handle(<<"GET">>, [<<"settings">>, <<"stream-timeout">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_stream_timeout_ms">>, Req0, State);
+    Default = #{enabled => false, action => <<"none">>, threshold_count => 3,
+                threshold_window_minutes => 5, temp_unsched_minutes => 30},
+    Value = case ersub_repo:get_setting(<<"stream_timeout_config">>) of
+        {ok, V} when is_map(V) -> V;
+        _ -> Default
+    end,
+    reply_ok(Value, Req0, State);
 
 %% PUT /api/v1/admin/settings/stream-timeout
 handle(<<"PUT">>, [<<"settings">>, <<"stream-timeout">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_stream_timeout_ms">>, Req0, State);
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Action = maps:get(<<"action">>, Params, <<"none">>),
+    TempMins = maps:get(<<"temp_unsched_minutes">>, Params, 30),
+    ValidActions = [<<"temp_unsched">>, <<"error">>, <<"none">>],
+    case lists:member(Action, ValidActions) of
+        false ->
+            reply_err(400, <<"action must be one of: temp_unsched, error, none">>, Req1, State);
+        true ->
+            ThreshCount = maps:get(<<"threshold_count">>, Params, 3),
+            ThreshWindow = maps:get(<<"threshold_window_minutes">>, Params, 5),
+            Validation2 = if
+                Action =:= <<"temp_unsched">>,
+                    not (is_integer(TempMins) andalso TempMins >= 1) ->
+                    {error, <<"temp_unsched_minutes must be >= 1">>};
+                not (is_integer(ThreshCount) andalso ThreshCount >= 1) ->
+                    {error, <<"threshold_count must be a positive integer">>};
+                not (is_integer(ThreshWindow) andalso ThreshWindow >= 1) ->
+                    {error, <<"threshold_window_minutes must be a positive integer">>};
+                true -> ok
+            end,
+            case Validation2 of
+                {error, V2Msg} ->
+                    reply_err(400, V2Msg, Req1, State);
+                ok ->
+                    Value = #{
+                        enabled => maps:get(<<"enabled">>, Params, false),
+                        action => Action,
+                        threshold_count => ThreshCount,
+                        threshold_window_minutes => ThreshWindow,
+                        temp_unsched_minutes => TempMins
+                    },
+                    case ersub_repo:upsert_setting(<<"stream_timeout_config">>, Value) of
+                        {ok, _} -> reply_ok(Value, Req1, State);
+                        {error, Reason} -> reply_err(500, Reason, Req1, State)
+                    end
+            end
+    end;
 
-%% === T5-28: Admin Settings Extension ===
-
-%% GET /api/v1/admin/settings/admin-api-key — Read (masked)
+%% GET /api/v1/admin/settings/admin-api-key
 handle(<<"GET">>, [<<"settings">>, <<"admin-api-key">>], Req0, State, _Claims) ->
     case ersub_repo:get_setting(<<"admin_api_key">>) of
-        {ok, KeyVal} when is_binary(KeyVal), byte_size(KeyVal) > 12 ->
-            Masked = iolist_to_binary([
-                binary:part(KeyVal, 0, 8), <<"****">>,
-                binary:part(KeyVal, byte_size(KeyVal) - 4, 4)
-            ]),
-            reply_ok(#{data => #{key => <<"admin_api_key">>, value => Masked}}, Req0, State);
-        {ok, _KeyVal} ->
-            reply_ok(#{data => #{key => <<"admin_api_key">>, value => <<"****">>}}, Req0, State);
+        {ok, KeyVal} when is_binary(KeyVal), byte_size(KeyVal) >= 4 ->
+            Last4 = binary:part(KeyVal, byte_size(KeyVal) - 4, 4),
+            Masked = iolist_to_binary([<<"****">>, Last4]),
+            reply_ok(#{exists => true, masked_key => Masked}, Req0, State);
+        {ok, _} ->
+            reply_ok(#{exists => true, masked_key => <<"****">>}, Req0, State);
         {error, not_found} ->
-            reply_err(404, not_found, Req0, State);
+            reply_ok(#{exists => false, masked_key => null}, Req0, State);
         {error, Reason} ->
             reply_err(500, Reason, Req0, State)
     end;
 
-%% POST /api/v1/admin/settings/admin-api-key/regenerate — Generate new key
+%% POST /api/v1/admin/settings/admin-api-key/regenerate
 handle(<<"POST">>, [<<"settings">>, <<"admin-api-key">>, <<"regenerate">>], Req0, State, _Claims) ->
-    NewKey = binary:encode_hex(crypto:strong_rand_bytes(24)),
+    NewKey = binary:encode_hex(crypto:strong_rand_bytes(32), lowercase),
     case ersub_repo:upsert_setting(<<"admin_api_key">>, NewKey) of
         {ok, _} ->
             ersub_config_srv:set(admin_api_key, NewKey),
-            Masked = iolist_to_binary([
-                binary:part(NewKey, 0, 8), <<"****">>,
-                binary:part(NewKey, byte_size(NewKey) - 4, 4)
-            ]),
-            reply_ok(#{data => #{key => <<"admin_api_key">>, value => Masked}}, Req0, State);
+            reply_ok(#{key => NewKey}, Req0, State);
         {error, Reason} ->
             reply_err(500, Reason, Req0, State)
     end;
 
-%% DELETE /api/v1/admin/settings/admin-api-key — Delete the key
+%% DELETE /api/v1/admin/settings/admin-api-key
 handle(<<"DELETE">>, [<<"settings">>, <<"admin-api-key">>], Req0, State, _Claims) ->
     case ersub_repo:query("DELETE FROM settings WHERE key = $1", [<<"admin_api_key">>]) of
         {ok, _} ->
-            reply_ok(#{success => true}, Req0, State);
+            ersub_config_srv:set(admin_api_key, undefined),
+            reply_ok(#{message => <<"Admin API key deleted">>}, Req0, State);
         {error, Reason} ->
             reply_err(500, Reason, Req0, State)
     end;
 
 %% GET /api/v1/admin/settings/rectifier
 handle(<<"GET">>, [<<"settings">>, <<"rectifier">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_rectifier">>, Req0, State);
+    Default = #{enabled => false, thinking_signature_enabled => false,
+                thinking_budget_enabled => false, apikey_signature_enabled => false,
+                apikey_signature_patterns => []},
+    Value = case ersub_repo:get_setting(<<"rectifier_config">>) of
+        {ok, V} when is_map(V) -> V;
+        _ -> Default
+    end,
+    reply_ok(Value, Req0, State);
 
 %% PUT /api/v1/admin/settings/rectifier
 handle(<<"PUT">>, [<<"settings">>, <<"rectifier">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_rectifier">>, Req0, State);
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Patterns = maps:get(<<"apikey_signature_patterns">>, Params, []),
+    case validate_regex_patterns(Patterns) of
+        {error, Bad} ->
+            Msg = iolist_to_binary([<<"Invalid regex pattern: ">>, Bad]),
+            reply_err(400, Msg, Req1, State);
+        ok ->
+            case ersub_repo:upsert_setting(<<"rectifier_config">>, Params) of
+                {ok, _} -> reply_ok(Params, Req1, State);
+                {error, Reason} -> reply_err(500, Reason, Req1, State)
+            end
+    end;
 
 %% GET /api/v1/admin/settings/beta-policy
 handle(<<"GET">>, [<<"settings">>, <<"beta-policy">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_beta_policy">>, Req0, State);
+    Default = #{rules => []},
+    Value = case ersub_repo:get_setting(<<"beta_policy_config">>) of
+        {ok, V} when is_map(V) -> V;
+        _ -> Default
+    end,
+    reply_ok(Value, Req0, State);
 
 %% PUT /api/v1/admin/settings/beta-policy
 handle(<<"PUT">>, [<<"settings">>, <<"beta-policy">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_beta_policy">>, Req0, State);
-
-%% === T6-12: Settings Extension ===
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Rules = maps:get(<<"rules">>, Params, []),
+    case validate_policy_rules(Rules) of
+        {error, Msg} ->
+            reply_err(400, Msg, Req1, State);
+        ok ->
+            case ersub_repo:upsert_setting(<<"beta_policy_config">>, Params) of
+                {ok, _} -> reply_ok(Params, Req1, State);
+                {error, Reason} -> reply_err(500, Reason, Req1, State)
+            end
+    end;
 
 %% GET /api/v1/admin/settings/web-search-emulation
 handle(<<"GET">>, [<<"settings">>, <<"web-search-emulation">>], Req0, State, _Claims) ->
-    typed_setting_get(<<"ops_web_search_emulation">>, Req0, State);
+    case ersub_repo:get_setting(<<"web_search_emulation_config">>) of
+        {ok, V} when is_map(V) ->
+            Providers = maps:get(<<"providers">>, V, []),
+            Masked = [mask_provider_api_key(P) || P <- Providers],
+            reply_ok(#{enabled => maps:get(<<"enabled">>, V, false),
+                       providers => Masked}, Req0, State);
+        _ ->
+            reply_ok(#{enabled => false, providers => []}, Req0, State)
+    end;
 
 %% PUT /api/v1/admin/settings/web-search-emulation
 handle(<<"PUT">>, [<<"settings">>, <<"web-search-emulation">>], Req0, State, _Claims) ->
-    typed_setting_put(<<"ops_web_search_emulation">>, Req0, State);
+    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    Params = jsx:decode(Body, [return_maps]),
+    Providers = maps:get(<<"providers">>, Params, []),
+    case validate_provider_types(Providers) of
+        {error, Msg} ->
+            reply_err(400, Msg, Req1, State);
+        ok ->
+            Types = [maps:get(<<"type">>, P, <<>>) || P <- Providers],
+            case length(Types) =:= length(lists:usort(Types)) of
+                false ->
+                    reply_err(400, <<"duplicate provider types are not allowed">>, Req1, State);
+                true ->
+                    ExistingProviders = case ersub_repo:get_setting(<<"web_search_emulation_config">>) of
+                        {ok, Existing} when is_map(Existing) ->
+                            maps:get(<<"providers">>, Existing, []);
+                        _ -> []
+                    end,
+                    Merged = merge_providers(Providers, ExistingProviders),
+                    NewConfig = Params#{<<"providers">> => Merged},
+                    case ersub_repo:upsert_setting(<<"web_search_emulation_config">>, NewConfig) of
+                        {ok, _} ->
+                            MaskedOut = [mask_provider_api_key(P) || P <- Merged],
+                            reply_ok(NewConfig#{<<"providers">> => MaskedOut}, Req1, State);
+                        {error, Reason} ->
+                            reply_err(500, Reason, Req1, State)
+                    end
+            end
+    end;
 
 %% POST /api/v1/admin/settings/web-search-emulation/test
 handle(<<"POST">>, [<<"settings">>, <<"web-search-emulation">>, <<"test">>], Req0, State, _Claims) ->
@@ -3704,29 +3923,6 @@ reply_json(Status, Body, Req) ->
         #{<<"content-type">> => <<"application/json">>},
         jsx:encode(Body), Req).
 
-typed_setting_get(SettingKey, Req0, State) ->
-    case ersub_repo:get_setting(SettingKey) of
-        {ok, Value} ->
-            reply_ok(#{data => #{key => SettingKey, value => Value}}, Req0, State);
-        {error, not_found} ->
-            reply_err(404, not_found, Req0, State);
-        {error, Reason} ->
-            reply_err(500, Reason, Req0, State)
-    end.
-
-typed_setting_put(SettingKey, Req0, State) ->
-    {ok, Body, Req1} = cowboy_req:read_body(Req0),
-    Params = jsx:decode(Body, [return_maps]),
-    Value = maps:get(<<"value">>, Params),
-    case ersub_repo:upsert_setting(SettingKey, Value) of
-        {ok, _} ->
-            ersub_config_srv:set(binary_to_atom(SettingKey), Value),
-            ersub_clips_config:reload(),
-            reply_ok(#{success => true}, Req1, State);
-        {error, Reason} ->
-            reply_err(500, Reason, Req1, State)
-    end.
-
 auth_msg(missing_token) -> <<"Missing Authorization header">>;
 auth_msg(not_admin) -> <<"Admin role required">>;
 auth_msg(token_expired) -> <<"Token expired">>;
@@ -3858,6 +4054,629 @@ parse_proxy_host_port(Url) when is_binary(Url) ->
         _ ->
             {error, invalid_proxy_url}
     end.
+
+%% === System Settings Helpers ===
+
+settings_load_all() ->
+    case ersub_repo:squery("SELECT key, value FROM settings") of
+        {ok, _, Rows} ->
+            lists:foldl(fun({K, V}, Acc) ->
+                case is_binary(V) of
+                    true ->
+                        try maps:put(K, jsx:decode(V, [return_maps]), Acc)
+                        catch _:_ -> Acc
+                        end;
+                    false -> Acc
+                end
+            end, #{}, Rows);
+        _ -> #{}
+    end.
+
+sg(K, DbMap, Default) ->
+    case maps:get(K, DbMap, Default) of
+        null -> Default;
+        undefined -> Default;
+        V -> V
+    end.
+
+sgb(K, DbMap, Default) ->
+    case maps:get(K, DbMap, Default) of
+        true -> true;
+        false -> false;
+        _ -> Default
+    end.
+
+sgn(K, DbMap, Default) ->
+    case maps:get(K, DbMap, Default) of
+        V when is_number(V) -> V;
+        _ -> Default
+    end.
+
+sgc(K, DbMap) ->
+    case maps:get(K, DbMap, undefined) of
+        V when is_binary(V), V =/= <<>> -> true;
+        _ -> false
+    end.
+
+assemble_system_settings(DbMap) ->
+    #{
+        registration_enabled => sgb(<<"registration_enabled">>, DbMap, true),
+        email_verify_enabled => sgb(<<"email_verify_enabled">>, DbMap, false),
+        registration_email_suffix_whitelist => sg(<<"registration_email_suffix_whitelist">>, DbMap, []),
+        promo_code_enabled => sgb(<<"promo_code_enabled">>, DbMap, false),
+        password_reset_enabled => sgb(<<"password_reset_enabled">>, DbMap, true),
+        frontend_url => sg(<<"frontend_url">>, DbMap, <<>>),
+        invitation_code_enabled => sgb(<<"invitation_code_enabled">>, DbMap, false),
+        totp_enabled => sgb(<<"totp_enabled">>, DbMap, false),
+        totp_encryption_key_configured => sgc(<<"totp_encryption_key">>, DbMap),
+        login_agreement_enabled => sgb(<<"login_agreement_enabled">>, DbMap, false),
+        login_agreement_mode => sg(<<"login_agreement_mode">>, DbMap, <<"modal">>),
+        login_agreement_updated_at => sg(<<"login_agreement_updated_at">>, DbMap, <<>>),
+        login_agreement_documents => sg(<<"login_agreement_documents">>, DbMap, []),
+        default_balance => sgn(<<"default_balance">>, DbMap, 0),
+        affiliate_rebate_rate => sgn(<<"affiliate_rebate_rate">>, DbMap, 0),
+        affiliate_rebate_freeze_hours => sgn(<<"affiliate_rebate_freeze_hours">>, DbMap, 0),
+        affiliate_rebate_duration_days => sgn(<<"affiliate_rebate_duration_days">>, DbMap, 0),
+        affiliate_rebate_per_invitee_cap => sgn(<<"affiliate_rebate_per_invitee_cap">>, DbMap, 0),
+        default_concurrency => sgn(<<"default_concurrency">>, DbMap, 5),
+        default_user_rpm_limit => sgn(<<"default_user_rpm_limit">>, DbMap, 60),
+        default_subscriptions => sg(<<"default_subscriptions">>, DbMap, []),
+        auth_source_default_email_balance => sgn(<<"auth_source_default_email_balance">>, DbMap, 0),
+        auth_source_default_email_concurrency => sgn(<<"auth_source_default_email_concurrency">>, DbMap, 5),
+        auth_source_default_email_subscriptions => sg(<<"auth_source_default_email_subscriptions">>, DbMap, []),
+        auth_source_default_email_grant_on_signup => sgb(<<"auth_source_default_email_grant_on_signup">>, DbMap, false),
+        auth_source_default_email_grant_on_first_bind => sgb(<<"auth_source_default_email_grant_on_first_bind">>, DbMap, false),
+        auth_source_default_linuxdo_balance => sgn(<<"auth_source_default_linuxdo_balance">>, DbMap, 0),
+        auth_source_default_linuxdo_concurrency => sgn(<<"auth_source_default_linuxdo_concurrency">>, DbMap, 5),
+        auth_source_default_linuxdo_subscriptions => sg(<<"auth_source_default_linuxdo_subscriptions">>, DbMap, []),
+        auth_source_default_linuxdo_grant_on_signup => sgb(<<"auth_source_default_linuxdo_grant_on_signup">>, DbMap, false),
+        auth_source_default_linuxdo_grant_on_first_bind => sgb(<<"auth_source_default_linuxdo_grant_on_first_bind">>, DbMap, false),
+        auth_source_default_oidc_balance => sgn(<<"auth_source_default_oidc_balance">>, DbMap, 0),
+        auth_source_default_oidc_concurrency => sgn(<<"auth_source_default_oidc_concurrency">>, DbMap, 5),
+        auth_source_default_oidc_subscriptions => sg(<<"auth_source_default_oidc_subscriptions">>, DbMap, []),
+        auth_source_default_oidc_grant_on_signup => sgb(<<"auth_source_default_oidc_grant_on_signup">>, DbMap, false),
+        auth_source_default_oidc_grant_on_first_bind => sgb(<<"auth_source_default_oidc_grant_on_first_bind">>, DbMap, false),
+        auth_source_default_wechat_balance => sgn(<<"auth_source_default_wechat_balance">>, DbMap, 0),
+        auth_source_default_wechat_concurrency => sgn(<<"auth_source_default_wechat_concurrency">>, DbMap, 5),
+        auth_source_default_wechat_subscriptions => sg(<<"auth_source_default_wechat_subscriptions">>, DbMap, []),
+        auth_source_default_wechat_grant_on_signup => sgb(<<"auth_source_default_wechat_grant_on_signup">>, DbMap, false),
+        auth_source_default_wechat_grant_on_first_bind => sgb(<<"auth_source_default_wechat_grant_on_first_bind">>, DbMap, false),
+        auth_source_default_github_balance => sgn(<<"auth_source_default_github_balance">>, DbMap, 0),
+        auth_source_default_github_concurrency => sgn(<<"auth_source_default_github_concurrency">>, DbMap, 5),
+        auth_source_default_github_subscriptions => sg(<<"auth_source_default_github_subscriptions">>, DbMap, []),
+        auth_source_default_github_grant_on_signup => sgb(<<"auth_source_default_github_grant_on_signup">>, DbMap, false),
+        auth_source_default_github_grant_on_first_bind => sgb(<<"auth_source_default_github_grant_on_first_bind">>, DbMap, false),
+        auth_source_default_google_balance => sgn(<<"auth_source_default_google_balance">>, DbMap, 0),
+        auth_source_default_google_concurrency => sgn(<<"auth_source_default_google_concurrency">>, DbMap, 5),
+        auth_source_default_google_subscriptions => sg(<<"auth_source_default_google_subscriptions">>, DbMap, []),
+        auth_source_default_google_grant_on_signup => sgb(<<"auth_source_default_google_grant_on_signup">>, DbMap, false),
+        auth_source_default_google_grant_on_first_bind => sgb(<<"auth_source_default_google_grant_on_first_bind">>, DbMap, false),
+        force_email_on_third_party_signup => sgb(<<"force_email_on_third_party_signup">>, DbMap, false),
+        site_name => sg(<<"site_name">>, DbMap, <<"ErSub">>),
+        site_logo => sg(<<"site_logo">>, DbMap, <<>>),
+        site_subtitle => sg(<<"site_subtitle">>, DbMap, <<>>),
+        api_base_url => sg(<<"api_base_url">>, DbMap, <<>>),
+        contact_info => sg(<<"contact_info">>, DbMap, <<>>),
+        doc_url => sg(<<"doc_url">>, DbMap, <<>>),
+        home_content => sg(<<"home_content">>, DbMap, <<>>),
+        hide_ccs_import_button => sgb(<<"hide_ccs_import_button">>, DbMap, false),
+        table_default_page_size => sgn(<<"table_default_page_size">>, DbMap, 20),
+        table_page_size_options => sg(<<"table_page_size_options">>, DbMap, [10, 20, 50, 100]),
+        backend_mode_enabled => sgb(<<"backend_mode_enabled">>, DbMap, false),
+        custom_menu_items => sg(<<"custom_menu_items">>, DbMap, []),
+        custom_endpoints => sg(<<"custom_endpoints">>, DbMap, []),
+        smtp_host => sg(<<"smtp_host">>, DbMap, <<>>),
+        smtp_port => sgn(<<"smtp_port">>, DbMap, 587),
+        smtp_username => sg(<<"smtp_username">>, DbMap, <<>>),
+        smtp_password_configured => sgc(<<"smtp_password">>, DbMap),
+        smtp_from_email => sg(<<"smtp_from_email">>, DbMap, <<>>),
+        smtp_from_name => sg(<<"smtp_from_name">>, DbMap, <<>>),
+        smtp_use_tls => sgb(<<"smtp_use_tls">>, DbMap, false),
+        turnstile_enabled => sgb(<<"turnstile_enabled">>, DbMap, false),
+        turnstile_site_key => sg(<<"turnstile_site_key">>, DbMap, <<>>),
+        turnstile_secret_key_configured => sgc(<<"turnstile_secret_key">>, DbMap),
+        linuxdo_connect_enabled => sgb(<<"linuxdo_connect_enabled">>, DbMap, false),
+        linuxdo_connect_client_id => sg(<<"linuxdo_connect_client_id">>, DbMap, <<>>),
+        linuxdo_connect_client_secret_configured => sgc(<<"linuxdo_connect_client_secret">>, DbMap),
+        linuxdo_connect_redirect_url => sg(<<"linuxdo_connect_redirect_url">>, DbMap, <<>>),
+        wechat_connect_enabled => sgb(<<"wechat_connect_enabled">>, DbMap, false),
+        wechat_connect_app_id => sg(<<"wechat_connect_app_id">>, DbMap, <<>>),
+        wechat_connect_app_secret_configured => sgc(<<"wechat_connect_app_secret">>, DbMap),
+        wechat_connect_open_app_id => sg(<<"wechat_connect_open_app_id">>, DbMap, <<>>),
+        wechat_connect_open_app_secret_configured => sgc(<<"wechat_connect_open_app_secret">>, DbMap),
+        wechat_connect_mp_app_id => sg(<<"wechat_connect_mp_app_id">>, DbMap, <<>>),
+        wechat_connect_mp_app_secret_configured => sgc(<<"wechat_connect_mp_app_secret">>, DbMap),
+        wechat_connect_mobile_app_id => sg(<<"wechat_connect_mobile_app_id">>, DbMap, <<>>),
+        wechat_connect_mobile_app_secret_configured => sgc(<<"wechat_connect_mobile_app_secret">>, DbMap),
+        wechat_connect_open_enabled => sgb(<<"wechat_connect_open_enabled">>, DbMap, false),
+        wechat_connect_mp_enabled => sgb(<<"wechat_connect_mp_enabled">>, DbMap, false),
+        wechat_connect_mobile_enabled => sgb(<<"wechat_connect_mobile_enabled">>, DbMap, false),
+        wechat_connect_mode => sg(<<"wechat_connect_mode">>, DbMap, <<"open">>),
+        wechat_connect_scopes => sg(<<"wechat_connect_scopes">>, DbMap, <<>>),
+        wechat_connect_redirect_url => sg(<<"wechat_connect_redirect_url">>, DbMap, <<>>),
+        wechat_connect_frontend_redirect_url => sg(<<"wechat_connect_frontend_redirect_url">>, DbMap, <<>>),
+        oidc_connect_enabled => sgb(<<"oidc_connect_enabled">>, DbMap, false),
+        oidc_connect_provider_name => sg(<<"oidc_connect_provider_name">>, DbMap, <<>>),
+        oidc_connect_client_id => sg(<<"oidc_connect_client_id">>, DbMap, <<>>),
+        oidc_connect_client_secret_configured => sgc(<<"oidc_connect_client_secret">>, DbMap),
+        oidc_connect_issuer_url => sg(<<"oidc_connect_issuer_url">>, DbMap, <<>>),
+        oidc_connect_discovery_url => sg(<<"oidc_connect_discovery_url">>, DbMap, <<>>),
+        oidc_connect_authorize_url => sg(<<"oidc_connect_authorize_url">>, DbMap, <<>>),
+        oidc_connect_token_url => sg(<<"oidc_connect_token_url">>, DbMap, <<>>),
+        oidc_connect_userinfo_url => sg(<<"oidc_connect_userinfo_url">>, DbMap, <<>>),
+        oidc_connect_jwks_url => sg(<<"oidc_connect_jwks_url">>, DbMap, <<>>),
+        oidc_connect_scopes => sg(<<"oidc_connect_scopes">>, DbMap, <<>>),
+        oidc_connect_redirect_url => sg(<<"oidc_connect_redirect_url">>, DbMap, <<>>),
+        oidc_connect_frontend_redirect_url => sg(<<"oidc_connect_frontend_redirect_url">>, DbMap, <<>>),
+        oidc_connect_token_auth_method => sg(<<"oidc_connect_token_auth_method">>, DbMap, <<"client_secret_basic">>),
+        oidc_connect_use_pkce => sgb(<<"oidc_connect_use_pkce">>, DbMap, false),
+        oidc_connect_validate_id_token => sgb(<<"oidc_connect_validate_id_token">>, DbMap, true),
+        oidc_connect_allowed_signing_algs => sg(<<"oidc_connect_allowed_signing_algs">>, DbMap, <<>>),
+        oidc_connect_clock_skew_seconds => sgn(<<"oidc_connect_clock_skew_seconds">>, DbMap, 30),
+        oidc_connect_require_email_verified => sgb(<<"oidc_connect_require_email_verified">>, DbMap, false),
+        oidc_connect_userinfo_email_path => sg(<<"oidc_connect_userinfo_email_path">>, DbMap, <<>>),
+        oidc_connect_userinfo_id_path => sg(<<"oidc_connect_userinfo_id_path">>, DbMap, <<>>),
+        oidc_connect_userinfo_username_path => sg(<<"oidc_connect_userinfo_username_path">>, DbMap, <<>>),
+        github_oauth_enabled => sgb(<<"github_oauth_enabled">>, DbMap, false),
+        github_oauth_client_id => sg(<<"github_oauth_client_id">>, DbMap, <<>>),
+        github_oauth_client_secret_configured => sgc(<<"github_oauth_client_secret">>, DbMap),
+        github_oauth_redirect_url => sg(<<"github_oauth_redirect_url">>, DbMap, <<>>),
+        github_oauth_frontend_redirect_url => sg(<<"github_oauth_frontend_redirect_url">>, DbMap, <<>>),
+        google_oauth_enabled => sgb(<<"google_oauth_enabled">>, DbMap, false),
+        google_oauth_client_id => sg(<<"google_oauth_client_id">>, DbMap, <<>>),
+        google_oauth_client_secret_configured => sgc(<<"google_oauth_client_secret">>, DbMap),
+        google_oauth_redirect_url => sg(<<"google_oauth_redirect_url">>, DbMap, <<>>),
+        google_oauth_frontend_redirect_url => sg(<<"google_oauth_frontend_redirect_url">>, DbMap, <<>>),
+        enable_model_fallback => sgb(<<"enable_model_fallback">>, DbMap, false),
+        fallback_model_anthropic => sg(<<"fallback_model_anthropic">>, DbMap, <<>>),
+        fallback_model_openai => sg(<<"fallback_model_openai">>, DbMap, <<>>),
+        fallback_model_gemini => sg(<<"fallback_model_gemini">>, DbMap, <<>>),
+        fallback_model_antigravity => sg(<<"fallback_model_antigravity">>, DbMap, <<>>),
+        enable_identity_patch => sgb(<<"enable_identity_patch">>, DbMap, false),
+        identity_patch_prompt => sg(<<"identity_patch_prompt">>, DbMap, <<>>),
+        ops_monitoring_enabled => sgb(<<"ops_monitoring_enabled">>, DbMap, false),
+        ops_realtime_monitoring_enabled => sgb(<<"ops_realtime_monitoring_enabled">>, DbMap, false),
+        ops_query_mode_default => sg(<<"ops_query_mode_default">>, DbMap, <<"auto">>),
+        ops_metrics_interval_seconds => sgn(<<"ops_metrics_interval_seconds">>, DbMap, 300),
+        min_claude_code_version => sg(<<"min_claude_code_version">>, DbMap, <<>>),
+        max_claude_code_version => sg(<<"max_claude_code_version">>, DbMap, <<>>),
+        allow_ungrouped_key_scheduling => sgb(<<"allow_ungrouped_key_scheduling">>, DbMap, true),
+        enable_fingerprint_unification => sgb(<<"enable_fingerprint_unification">>, DbMap, false),
+        enable_metadata_passthrough => sgb(<<"enable_metadata_passthrough">>, DbMap, false),
+        enable_cch_signing => sgb(<<"enable_cch_signing">>, DbMap, false),
+        enable_anthropic_cache_ttl_1h_injection => sgb(<<"enable_anthropic_cache_ttl_1h_injection">>, DbMap, false),
+        web_search_emulation_enabled => sgb(<<"web_search_emulation_enabled">>, DbMap, false),
+        payment_enabled => sgb(<<"payment_enabled">>, DbMap, false),
+        risk_control_enabled => sgb(<<"risk_control_enabled">>, DbMap, false),
+        payment_min_amount => sgn(<<"payment_min_amount">>, DbMap, 1),
+        payment_max_amount => sgn(<<"payment_max_amount">>, DbMap, 10000),
+        payment_daily_limit => sgn(<<"payment_daily_limit">>, DbMap, 0),
+        payment_order_timeout_minutes => sgn(<<"payment_order_timeout_minutes">>, DbMap, 30),
+        payment_max_pending_orders => sgn(<<"payment_max_pending_orders">>, DbMap, 3),
+        payment_enabled_types => sg(<<"payment_enabled_types">>, DbMap, []),
+        payment_balance_disabled => sgb(<<"payment_balance_disabled">>, DbMap, false),
+        payment_balance_recharge_multiplier => sgn(<<"payment_balance_recharge_multiplier">>, DbMap, 1),
+        payment_recharge_fee_rate => sgn(<<"payment_recharge_fee_rate">>, DbMap, 0),
+        payment_load_balance_strategy => sg(<<"payment_load_balance_strategy">>, DbMap, <<"random">>),
+        payment_product_name_prefix => sg(<<"payment_product_name_prefix">>, DbMap, <<>>),
+        payment_product_name_suffix => sg(<<"payment_product_name_suffix">>, DbMap, <<>>),
+        payment_help_image_url => sg(<<"payment_help_image_url">>, DbMap, <<>>),
+        payment_help_text => sg(<<"payment_help_text">>, DbMap, <<>>),
+        payment_cancel_rate_limit_enabled => sgb(<<"payment_cancel_rate_limit_enabled">>, DbMap, false),
+        payment_cancel_rate_limit_max => sgn(<<"payment_cancel_rate_limit_max">>, DbMap, 10),
+        payment_cancel_rate_limit_window => sgn(<<"payment_cancel_rate_limit_window">>, DbMap, 1),
+        payment_cancel_rate_limit_unit => sg(<<"payment_cancel_rate_limit_unit">>, DbMap, <<"day">>),
+        payment_cancel_rate_limit_window_mode => sg(<<"payment_cancel_rate_limit_window_mode">>, DbMap, <<"rolling">>),
+        payment_visible_method_alipay_source => sg(<<"payment_visible_method_alipay_source">>, DbMap, <<>>),
+        payment_visible_method_wxpay_source => sg(<<"payment_visible_method_wxpay_source">>, DbMap, <<>>),
+        payment_visible_method_alipay_enabled => sgb(<<"payment_visible_method_alipay_enabled">>, DbMap, false),
+        payment_visible_method_wxpay_enabled => sgb(<<"payment_visible_method_wxpay_enabled">>, DbMap, false),
+        openai_advanced_scheduler_enabled => sgb(<<"openai_advanced_scheduler_enabled">>, DbMap, false),
+        balance_low_notify_enabled => sgb(<<"balance_low_notify_enabled">>, DbMap, false),
+        balance_low_notify_threshold => sgn(<<"balance_low_notify_threshold">>, DbMap, 0),
+        balance_low_notify_recharge_url => sg(<<"balance_low_notify_recharge_url">>, DbMap, <<>>),
+        account_quota_notify_enabled => sgb(<<"account_quota_notify_enabled">>, DbMap, false),
+        account_quota_notify_emails => sg(<<"account_quota_notify_emails">>, DbMap, []),
+        channel_monitor_enabled => sgb(<<"channel_monitor_enabled">>, DbMap, false),
+        channel_monitor_default_interval_seconds => sgn(<<"channel_monitor_default_interval_seconds">>, DbMap, 300),
+        available_channels_enabled => sgb(<<"available_channels_enabled">>, DbMap, false),
+        affiliate_enabled => sgb(<<"affiliate_enabled">>, DbMap, false),
+        openai_fast_policy_settings => sg(<<"openai_fast_policy_settings">>, DbMap, null)
+    }.
+
+settings_upsert_batch(Params) when is_map(Params) ->
+    LifecycleKeys = [
+        <<"admin_api_key">>,
+        <<"overload_cooldown_config">>,
+        <<"rate_limit_429_cooldown">>,
+        <<"stream_timeout_config">>,
+        <<"rectifier_config">>,
+        <<"beta_policy_config">>,
+        <<"web_search_emulation_config">>,
+        <<"web_search_usage_count">>
+    ],
+    SensitiveFields = [
+        <<"smtp_password">>, <<"turnstile_secret_key">>,
+        <<"linuxdo_connect_client_secret">>, <<"wechat_connect_app_secret">>,
+        <<"wechat_connect_open_app_secret">>, <<"wechat_connect_mp_app_secret">>,
+        <<"wechat_connect_mobile_app_secret">>, <<"oidc_connect_client_secret">>,
+        <<"github_oauth_client_secret">>, <<"google_oauth_client_secret">>,
+        <<"totp_encryption_key">>
+    ],
+    ComputedFields = [
+        <<"smtp_password_configured">>, <<"turnstile_secret_key_configured">>,
+        <<"linuxdo_connect_client_secret_configured">>,
+        <<"wechat_connect_app_secret_configured">>,
+        <<"wechat_connect_open_app_secret_configured">>,
+        <<"wechat_connect_mp_app_secret_configured">>,
+        <<"wechat_connect_mobile_app_secret_configured">>,
+        <<"oidc_connect_client_secret_configured">>,
+        <<"github_oauth_client_secret_configured">>,
+        <<"google_oauth_client_secret_configured">>,
+        <<"totp_encryption_key_configured">>
+    ],
+    Errors = maps:fold(fun(K, V, Acc) ->
+        case lists:member(K, ComputedFields) orelse lists:member(K, LifecycleKeys) of
+            true -> Acc;
+            false ->
+                IsSensitiveEmpty = lists:member(K, SensitiveFields) andalso
+                    (V =:= <<>> orelse V =:= null),
+                case IsSensitiveEmpty of
+                    true -> Acc;
+                    false ->
+                        case ersub_repo:upsert_setting(K, V) of
+                            {ok, _} ->
+                                ersub_config_srv:set(binary_to_atom(K, utf8), V),
+                                Acc;
+                            {error, Reason} -> [{K, Reason} | Acc]
+                        end
+                end
+        end
+    end, [], Params),
+    case Errors of
+        [] -> ok;
+        _ -> {error, Errors}
+    end;
+settings_upsert_batch(_) ->
+    {error, <<"settings must be a JSON object">>}.
+
+is_valid_email(Email) when is_binary(Email) ->
+    case binary:match(Email, <<"@">>) of
+        nomatch -> false;
+        {Pos, _} ->
+            Local = binary:part(Email, 0, Pos),
+            Rest = binary:part(Email, Pos + 1, byte_size(Email) - Pos - 1),
+            byte_size(Local) > 0 andalso
+            byte_size(Rest) > 2 andalso
+            binary:match(Rest, <<".">>) =/= nomatch
+    end;
+is_valid_email(_) -> false.
+
+%% Strip CRLF/null — for values going into SMTP headers
+sanitize_header(V) when is_binary(V) ->
+    re:replace(V, <<"[\r\n\0]">>, <<>>, [global, {return, binary}]);
+sanitize_header(V) -> V.
+
+%% Strip <>/CRLF/null — for values going into SMTP envelope (MAIL FROM, RCPT TO)
+sanitize_smtp_addr(V) when is_binary(V) ->
+    re:replace(V, <<"[<>\r\n\0]">>, <<>>, [global, {return, binary}]);
+sanitize_smtp_addr(V) -> V.
+
+%% Validate host against SSRF and restrict to known SMTP ports
+check_smtp_host(Host, Port) ->
+    ValidPorts = [25, 465, 587, 2525],
+    case lists:member(Port, ValidPorts) of
+        false ->
+            {error, <<"Port not in allowed SMTP ports (25, 465, 587, 2525)">>};
+        true ->
+            HostStr = binary_to_list(Host),
+            case inet:getaddr(HostStr, inet) of
+                {ok, IP} ->
+                    case is_private_ip(IP) of
+                        true -> {error, <<"Host resolves to a private or reserved IP address">>};
+                        false -> ok
+                    end;
+                {error, _} ->
+                    {error, <<"Cannot resolve SMTP host">>}
+            end
+    end.
+
+is_private_ip({A, B, C, _}) ->
+    (A =:= 127) orelse
+    (A =:= 10) orelse
+    (A =:= 172 andalso B >= 16 andalso B =< 31) orelse
+    (A =:= 192 andalso B =:= 168) orelse
+    (A =:= 169 andalso B =:= 254) orelse
+    (A =:= 0) orelse
+    (A =:= 100 andalso B >= 64 andalso B =< 127) orelse
+    (A =:= 198 andalso B >= 18 andalso B =< 19) orelse
+    (A =:= 203 andalso B =:= 0 andalso C =:= 113) orelse
+    (A >= 224).
+
+%% TLS options with certificate verification
+tls_connect_opts(Host) ->
+    [{verify, verify_peer},
+     {cacerts, public_key:cacerts_get()},
+     {server_name_indication, binary_to_list(Host)},
+     {depth, 3}].
+
+%% Socket primitives using {tcp|tls, Sock} tagged tuples
+smtp_recv({tcp, Sock}) -> gen_tcp:recv(Sock, 0, 10000);
+smtp_recv({tls, Sock}) -> ssl:recv(Sock, 0, 10000).
+
+smtp_send({tcp, Sock}, Data) -> gen_tcp:send(Sock, Data);
+smtp_send({tls, Sock}, Data) -> ssl:send(Sock, Data).
+
+smtp_close({tcp, Sock}) -> gen_tcp:close(Sock);
+smtp_close({tls, Sock}) -> ssl:close(Sock).
+
+smtp_read_multiline(Conn) -> smtp_read_multiline(Conn, <<>>).
+smtp_read_multiline(Conn, Acc) ->
+    case smtp_recv(Conn) of
+        {ok, Line} ->
+            Stripped = string:trim(Line, trailing, "\r\n"),
+            NewAcc = <<Acc/binary, Stripped/binary>>,
+            case Stripped of
+                <<_:3/binary, $-, _/binary>> -> smtp_read_multiline(Conn, NewAcc);
+                _ -> {ok, NewAcc}
+            end;
+        {error, R} -> {error, R}
+    end.
+
+smtp_expect(Conn, Code) ->
+    case smtp_read_multiline(Conn) of
+        {ok, <<Code:3/binary, _/binary>>} -> ok;
+        {ok, Other} -> {error, Other};
+        {error, R} -> {error, R}
+    end.
+
+smtp_ehlo(Conn) ->
+    _ = smtp_send(Conn, <<"EHLO localhost\r\n">>),
+    case smtp_read_multiline(Conn) of
+        {ok, <<"250", _/binary>> = Resp} -> {ok, Resp};
+        {ok, Other} -> {error, {ehlo_rejected, Other}};
+        {error, R} -> {error, R}
+    end.
+
+smtp_auth_login(Conn, Username, Password) ->
+    _ = smtp_send(Conn, <<"AUTH LOGIN\r\n">>),
+    case smtp_recv(Conn) of
+        {ok, <<"334", _/binary>>} ->
+            _ = smtp_send(Conn, <<(base64:encode(Username))/binary, "\r\n">>),
+            case smtp_recv(Conn) of
+                {ok, <<"334", _/binary>>} ->
+                    _ = smtp_send(Conn, <<(base64:encode(Password))/binary, "\r\n">>),
+                    case smtp_recv(Conn) of
+                        {ok, <<"235", _/binary>>} -> ok;
+                        {ok, Err} -> {error, Err};
+                        {error, R} -> {error, R}
+                    end;
+                {ok, Err} -> {error, Err};
+                {error, R} -> {error, R}
+            end;
+        {ok, Err} -> {error, Err};
+        {error, R} -> {error, R}
+    end.
+
+%% Connect: use_tls=true → direct SMTPS (port 465); use_tls=false → plain TCP (STARTTLS auto-upgraded in handshake)
+smtp_connect(Host, Port, true) ->
+    HostStr = binary_to_list(Host),
+    TlsOpts = [binary, {active, false}, {packet, line} | tls_connect_opts(Host)],
+    case ssl:connect(HostStr, Port, TlsOpts, 15000) of
+        {ok, Sock} -> {ok, {tls, Sock}};
+        {error, R} -> {error, R}
+    end;
+smtp_connect(Host, Port, false) ->
+    HostStr = binary_to_list(Host),
+    case gen_tcp:connect(HostStr, Port, [binary, {active, false}, {packet, line}], 10000) of
+        {ok, Sock} -> {ok, {tcp, Sock}};
+        {error, R} -> {error, R}
+    end.
+
+%% Handshake: returns {ok, FinalConn} where FinalConn may be a TLS-upgraded socket.
+%% Caller must close FinalConn on success. On error, caller closes the original Conn.
+smtp_handshake(Host, Conn, Username, Password) ->
+    case smtp_expect(Conn, <<"220">>) of
+        ok ->
+            case smtp_ehlo(Conn) of
+                {ok, EhloResp} ->
+                    smtp_maybe_starttls_and_auth(Host, Conn, EhloResp, Username, Password);
+                {error, R} -> {error, R}
+            end;
+        {error, R} -> {error, R}
+    end.
+
+smtp_maybe_starttls_and_auth(Host, Conn, EhloResp, Username, Password) ->
+    case Conn of
+        {tls, _} ->
+            %% Already TLS (direct SMTPS), proceed to auth
+            case smtp_auth_login(Conn, Username, Password) of
+                ok -> {ok, Conn};
+                {error, R} -> {error, R}
+            end;
+        {tcp, TcpSock} ->
+            case binary:match(EhloResp, <<"STARTTLS">>) of
+                nomatch ->
+                    %% No STARTTLS offered, use plain auth
+                    case smtp_auth_login(Conn, Username, Password) of
+                        ok -> {ok, Conn};
+                        {error, R} -> {error, R}
+                    end;
+                _ ->
+                    %% Upgrade to TLS via STARTTLS
+                    _ = smtp_send(Conn, <<"STARTTLS\r\n">>),
+                    case smtp_expect(Conn, <<"220">>) of
+                        ok ->
+                            TlsOpts = [binary, {active, false}, {packet, line} | tls_connect_opts(Host)],
+                            case ssl:connect(TcpSock, TlsOpts, 15000) of
+                                {ok, TlsSock} ->
+                                    TlsConn = {tls, TlsSock},
+                                    case smtp_ehlo(TlsConn) of
+                                        {ok, _} ->
+                                            case smtp_auth_login(TlsConn, Username, Password) of
+                                                ok -> {ok, TlsConn};
+                                                {error, R} ->
+                                                    _ = smtp_close(TlsConn),
+                                                    {error, R}
+                                            end;
+                                        {error, R} ->
+                                            _ = smtp_close(TlsConn),
+                                            {error, R}
+                                    end;
+                                {error, R} ->
+                                    _ = gen_tcp:close(TcpSock),
+                                    {error, {tls_upgrade, R}}
+                            end;
+                        {error, R} -> {error, {starttls, R}}
+                    end
+            end
+    end.
+
+smtp_test_connection(Host, Port, UseTLS, Username, Password) ->
+    case check_smtp_host(Host, Port) of
+        {error, R} -> {error, R};
+        ok ->
+            SafeUser = sanitize_header(Username),
+            SafePass = sanitize_header(Password),
+            case smtp_connect(Host, Port, UseTLS) of
+                {ok, Conn} ->
+                    case smtp_handshake(Host, Conn, SafeUser, SafePass) of
+                        {ok, FinalConn} ->
+                            _ = smtp_send(FinalConn, <<"QUIT\r\n">>),
+                            _ = smtp_close(FinalConn),
+                            ok;
+                        {error, _} = Err ->
+                            _ = try smtp_close(Conn) catch _:_ -> ok end,
+                            Err
+                    end;
+                {error, Reason} -> {error, Reason}
+            end
+    end.
+
+smtp_send_test_email(Host, Port, UseTLS, Username, Password, FromEmail, FromName, ToEmail) ->
+    case check_smtp_host(Host, Port) of
+        {error, R} -> {error, R};
+        ok ->
+            SafeUser = sanitize_header(Username),
+            SafePass = sanitize_header(Password),
+            SafeFrom = sanitize_smtp_addr(FromEmail),
+            SafeFromName = sanitize_header(FromName),
+            SafeTo = sanitize_smtp_addr(ToEmail),
+            case smtp_connect(Host, Port, UseTLS) of
+                {ok, Conn} ->
+                    case smtp_handshake(Host, Conn, SafeUser, SafePass) of
+                        {ok, FinalConn} ->
+                            Result = smtp_do_send(FinalConn, SafeFrom, SafeFromName, SafeTo),
+                            _ = smtp_send(FinalConn, <<"QUIT\r\n">>),
+                            _ = smtp_close(FinalConn),
+                            Result;
+                        {error, _} = Err ->
+                            _ = try smtp_close(Conn) catch _:_ -> ok end,
+                            Err
+                    end;
+                {error, Reason} -> {error, Reason}
+            end
+    end.
+
+smtp_do_send(Conn, From, FromName, To) ->
+    MailFrom = iolist_to_binary([<<"MAIL FROM:<">>, From, <<">\r\n">>]),
+    _ = smtp_send(Conn, MailFrom),
+    case smtp_expect(Conn, <<"250">>) of
+        ok ->
+            RcptTo = iolist_to_binary([<<"RCPT TO:<">>, To, <<">\r\n">>]),
+            _ = smtp_send(Conn, RcptTo),
+            case smtp_expect(Conn, <<"250">>) of
+                ok ->
+                    _ = smtp_send(Conn, <<"DATA\r\n">>),
+                    case smtp_expect(Conn, <<"354">>) of
+                        ok ->
+                            Body = iolist_to_binary([
+                                <<"From: ">>, FromName, <<" <">>, From, <<">\r\n">>,
+                                <<"To: ">>, To, <<"\r\n">>,
+                                <<"Subject: SMTP Configuration Test\r\n">>,
+                                <<"MIME-Version: 1.0\r\n">>,
+                                <<"Content-Type: text/html; charset=UTF-8\r\n">>,
+                                <<"\r\n">>,
+                                <<"<html><body>">>,
+                                <<"<p>Test email from ErSub to verify SMTP configuration.</p>">>,
+                                <<"</body></html>\r\n">>,
+                                <<".\r\n">>
+                            ]),
+                            _ = smtp_send(Conn, Body),
+                            smtp_expect(Conn, <<"250">>);
+                        {error, R} -> {error, R}
+                    end;
+                {error, R} -> {error, R}
+            end;
+        {error, R} -> {error, R}
+    end.
+
+validate_regex_patterns(X) when not is_list(X) ->
+    {error, <<"apikey_signature_patterns must be a list">>};
+validate_regex_patterns([]) -> ok;
+validate_regex_patterns([H | T]) when is_binary(H) ->
+    case re:compile(H) of
+        {ok, _} -> validate_regex_patterns(T);
+        {error, _} -> {error, H}
+    end;
+validate_regex_patterns([H | _]) ->
+    {error, iolist_to_binary(io_lib:format("~p", [H]))}.
+
+validate_policy_rules(X) when not is_list(X) ->
+    {error, <<"rules must be a list">>};
+validate_policy_rules([]) -> ok;
+validate_policy_rules([Rule | Rest]) when is_map(Rule) ->
+    Action = maps:get(<<"action">>, Rule, <<>>),
+    Scope = maps:get(<<"scope">>, Rule, <<>>),
+    ValidActions = [<<"pass">>, <<"filter">>, <<"block">>],
+    ValidScopes = [<<"all">>, <<"oauth">>, <<"apikey">>, <<"bedrock">>],
+    case lists:member(Action, ValidActions) andalso lists:member(Scope, ValidScopes) of
+        true -> validate_policy_rules(Rest);
+        false ->
+            Msg = iolist_to_binary(io_lib:format(
+                "invalid rule: action=~s scope=~s", [Action, Scope])),
+            {error, Msg}
+    end;
+validate_policy_rules([_ | _]) ->
+    {error, <<"rules must be an array of objects">>}.
+
+validate_provider_types(X) when not is_list(X) ->
+    {error, <<"providers must be a list">>};
+validate_provider_types([]) -> ok;
+validate_provider_types([P | Rest]) when is_map(P) ->
+    Type = maps:get(<<"type">>, P, <<>>),
+    case lists:member(Type, [<<"brave">>, <<"tavily">>]) of
+        true -> validate_provider_types(Rest);
+        false ->
+            {error, iolist_to_binary([<<"invalid provider type: ">>, Type])}
+    end;
+validate_provider_types([_ | _]) ->
+    {error, <<"providers must be an array of objects">>}.
+
+mask_provider_api_key(Provider) when is_map(Provider) ->
+    HasKey = case maps:get(<<"api_key">>, Provider, <<>>) of
+        V when is_binary(V), V =/= <<>> -> true;
+        _ -> false
+    end,
+    Base = maps:without([<<"api_key">>], Provider),
+    Base#{<<"api_key_configured">> => HasKey};
+mask_provider_api_key(P) -> P.
+
+merge_providers(NewProviders, ExistingProviders) ->
+    ExByType = lists:foldl(fun(P, Acc) ->
+        maps:put(maps:get(<<"type">>, P, <<>>), P, Acc)
+    end, #{}, ExistingProviders),
+    lists:map(fun(P) ->
+        Type = maps:get(<<"type">>, P, <<>>),
+        NewKey = maps:get(<<"api_key">>, P, <<>>),
+        case NewKey =:= <<>> orelse NewKey =:= null of
+            true ->
+                ExP = maps:get(Type, ExByType, #{}),
+                P#{<<"api_key">> => maps:get(<<"api_key">>, ExP, <<>>)};
+            false ->
+                P
+        end
+    end, NewProviders).
 
 %% Check if a module's beam file on disk is newer than the loaded version.
 beam_modified(Module, LoadedPath) when is_list(LoadedPath) ->
