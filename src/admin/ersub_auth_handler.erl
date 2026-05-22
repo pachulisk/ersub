@@ -22,7 +22,6 @@ handle(<<"POST">>, [<<"login">>], Req0, State) ->
                 _ ->
                     case ersub_auth_srv:verify_password(Password, Hash) of
                         true ->
-                            %% Update last_login_at on success
                             ersub_repo:query(
                                 "UPDATE users SET last_login_at = NOW() WHERE id = $1",
                                 [UserId]),
@@ -30,7 +29,11 @@ handle(<<"POST">>, [<<"login">>], Req0, State) ->
                                 <<"user_id">> => UserId,
                                 <<"role">> => Role
                             }),
-                            {ok, reply_json(200, #{token => Token, user_id => UserId, role => Role}, Req1), State};
+                            {ok, reply_json(200, #{
+                                access_token => Token,
+                                token_type => <<"Bearer">>,
+                                user => #{id => UserId, email => Email, role => Role}
+                            }, Req1), State};
                         false ->
                             {ok, reply_json(401, #{error => #{message => <<"Invalid credentials">>}}, Req1), State}
                     end
@@ -184,10 +187,10 @@ handle(<<"GET">>, [<<"me">>], Req0, State) ->
                         [UserId])
                     of
                         {ok, _, [{Id, Email, Role, Balance, CreatedAt}]} ->
-                            {ok, reply_json(200, #{data => #{
+                            {ok, reply_json(200, #{
                                 id => Id, email => Email, role => Role,
                                 balance_usd => Balance, created_at => CreatedAt
-                            }}, Req0), State};
+                            }, Req0), State};
                         {ok, _, []} ->
                             {ok, reply_json(404, #{error => #{message => <<"User not found">>}}, Req0), State};
                         {error, Reason} ->

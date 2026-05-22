@@ -66,8 +66,12 @@ routes() ->
             %% Health check
             {"/health", ersub_health_handler, []},
 
-            %% Static files (frontend)
-            {"/[...]", cowboy_static, {priv_dir, ersub, "static"}}
+            %% Static assets (Vite build output — hashed filenames, long-lived)
+            {"/assets/[...]", cowboy_static, {priv_dir, ersub, "static/assets"}},
+
+            %% SPA root and all history-mode routes → index.html
+            {"/", cowboy_static, {priv_file, ersub, "static/index.html"}},
+            {"/[...]", cowboy_static, {priv_file, ersub, "static/index.html"}}
         ]}
     ].
 

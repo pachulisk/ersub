@@ -430,6 +430,20 @@ handle_call(get_alipay_config, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, State}
     end;
 
+%% === 18. GET WECHAT CONFIG (wechat_config.clp) ===
+handle_call(get_wechat_config, _From, #{port := Port} = State) ->
+    case run_and_collect(Port, State) of
+        {ok, AllFacts, S1} ->
+            Configs = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"wechat-config">>],
+            case Configs of
+                [C | _] -> {reply, {ok, C}, S1};
+                []      -> {reply, {ok, #{}}, S1}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end;
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 

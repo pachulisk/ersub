@@ -5,7 +5,7 @@ server:
   base_url: "${SERVER_BASE_URL}"
 
 database:
-  host: "localhost"
+  host: "${DB_HOST:-localhost}"
   port: 5432
   user: "${DB_USER}"
   password: "${DB_PASSWORD}"
@@ -94,7 +94,12 @@ payment:
   alipay_success_url: "${ALIPAY_SUCCESS_URL}"
   stripe_success_url: "${STRIPE_SUCCESS_URL}"
   wechat:
-    mch_id: ""
+    mch_id: "${WECHAT_MCH_ID}"
+    private_key: "${WECHAT_PRIVATE_KEY}"
+    certificate_serial_no: "${WECHAT_SERIAL_NO}"
+    api_v3_key: "${WECHAT_API_V3_KEY}"
+    platform_public_key: "${WECHAT_PLATFORM_PUBLIC_KEY}"
+    notify_url: "${WECHAT_NOTIFY_URL}"
 
 ops:
   usage_cleanup:

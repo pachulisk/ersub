@@ -17,6 +17,7 @@
         jsx,
         poolboy,
         yamerl,
+        jose,
         gproc
     ]},
     %% epgsql started on-demand by ersub_repo_pool, not at boot

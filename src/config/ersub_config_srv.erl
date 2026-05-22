@@ -111,10 +111,18 @@ expand_env_vars(Other) ->
 expand_env_string(Str) ->
     case re:run(Str, "\\$\\{([^}]+)\\}", [{capture, all, list}, global]) of
         {match, Matches} ->
-            Result = lists:foldl(fun([Full, VarName], Acc) ->
-                Replacement = case os:getenv(VarName) of
-                    false -> "";
-                    Val -> Val
+            Result = lists:foldl(fun([Full, VarExpr], Acc) ->
+                Replacement = case string:split(VarExpr, ":-") of
+                    [VarName, Default] ->
+                        case os:getenv(VarName) of
+                            false -> Default;
+                            Val -> Val
+                        end;
+                    [VarName] ->
+                        case os:getenv(VarName) of
+                            false -> "";
+                            Val -> Val
+                        end
                 end,
                 string:replace(Acc, Full, Replacement, all)
             end, Str, Matches),

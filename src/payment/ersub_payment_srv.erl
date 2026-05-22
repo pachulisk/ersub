@@ -18,7 +18,7 @@ start_link() ->
 %% Create a payment order.
 -spec create_order(integer(), binary(), number()) -> {ok, map()} | {error, term()}.
 create_order(UserId, Provider, AmountUsd) ->
-    gen_server:call(?SERVER, {create_order, UserId, Provider, AmountUsd}).
+    gen_server:call(?SERVER, {create_order, UserId, Provider, AmountUsd}, 30000).
 
 %% Get order status.
 -spec get_order(integer()) -> {ok, map()} | {error, not_found}.
@@ -341,6 +341,29 @@ maybe_init_checkout(OrderId, <<"stripe">>, AmountUsd, Order) ->
         {error, _} ->
             {null, Order}
     end;
+maybe_init_checkout(OrderId, <<"wechat">>, AmountUsd, Order) ->
+    case ersub_wechat:is_available() of
+        false -> {null, Order};
+        true  ->
+            Cfg = case ersub_clips_pool:get_wechat_config() of
+                {ok, C} -> C;
+                _       -> #{}
+            end,
+            Rate     = get_float(maps:get(<<"usd-to-cny-rate">>, Cfg, 7.20)),
+            AmtCny   = to_float(AmountUsd) * Rate,
+            AmtFen   = round(AmtCny * 100),
+            Meta     = jsx:encode(#{cny_amount => AmtCny, cny_rate => Rate,
+                                    fen => AmtFen}),
+            ersub_repo:query(
+                "UPDATE payment_orders SET metadata = $2 WHERE id = $1",
+                [OrderId, Meta]),
+            case ersub_wechat:create_native_order(
+                    integer_to_binary(OrderId), AmtFen,
+                    <<"ErSub Balance Top-up">>) of
+                {ok, #{code_url := Url}} -> {Url, Order};
+                {error, _}              -> {null, Order}
+            end
+    end;
 maybe_init_checkout(_OrderId, _Provider, _Amount, Order) ->
     {null, Order}.
 
@@ -357,7 +380,18 @@ do_process_refund(OrderId, UserId, AmtFloat) ->
                     AmtCny   = get_float(maps:get(<<"cny_amount">>, MetaMap,
                                                   AmtFloat * 7.20)),
                     case ersub_alipay:refund(integer_to_binary(OrderId), AmtCny) of
-                        ok           -> do_internal_refund(OrderId, UserId, AmtFloat);
+                        ok              -> do_internal_refund(OrderId, UserId, AmtFloat);
+                        {error, Reason} -> {error, Reason}
+                    end;
+                <<"wechat">> ->
+                    MetaMap = safe_decode_meta(Meta),
+                    Rate    = get_float(maps:get(<<"cny_rate">>, MetaMap, 7.20)),
+                    AmtFen  = case maps:get(<<"fen">>, MetaMap, undefined) of
+                        undefined -> round(AmtFloat * Rate * 100);
+                        F         -> round(get_float(F))
+                    end,
+                    case ersub_wechat:refund(integer_to_binary(OrderId), AmtFen) of
+                        ok              -> do_internal_refund(OrderId, UserId, AmtFloat);
                         {error, Reason} -> {error, Reason}
                     end;
                 _ ->
@@ -415,8 +449,8 @@ ensure_binary(_)                   -> <<>>.
 
 get_jwt_secret() ->
     case ersub_config_srv:get(auth_jwt_secret, <<>>) of
-        <<>> -> <<"ersub-default-jwt-secret-change-me">>;
-        S when is_list(S) -> list_to_binary(S);
+        <<>> -> error({fatal_config, jwt_secret_not_set});
+        S when is_list(S)   -> list_to_binary(S);
         S when is_binary(S) -> S
     end.
 

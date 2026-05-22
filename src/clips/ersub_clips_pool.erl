@@ -11,7 +11,7 @@
          evaluate_messages_dispatch/1]).
 %% Configuration query APIs
 -export([get_platform_config/1, check_retriable/1, get_selection_layers/0,
-         get_alipay_config/0]).
+         get_alipay_config/0, get_wechat_config/0]).
 %% Channel filter API
 -export([filter_channels/1]).
 %% Subscription validation API
@@ -159,4 +159,11 @@ get_selection_layers() ->
 get_alipay_config() ->
     with_worker(fun(W) ->
         gen_server:call(W, get_alipay_config, 5000)
+    end).
+
+%% Get WeChat Pay business configuration (gateway URL, rate, enabled flag).
+-spec get_wechat_config() -> {ok, map()} | {error, term()}.
+get_wechat_config() ->
+    with_worker(fun(W) ->
+        gen_server:call(W, get_wechat_config, 5000)
     end).

@@ -124,13 +124,17 @@ handle(<<"GET">>, [<<"orders">>, IdBin], Req0, State) ->
 
 %% POST /api/payment/webhooks/:provider -- webhook handler (no auth, signature verified)
 handle(<<"POST">>, [<<"webhooks">>, Provider], Req0, State) ->
-    {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    {ok, Body, Req1} = cowboy_req:read_body(Req0, #{length => 65536, period => 5000}),
     case handle_webhook(Provider, Body, Req1) of
         ok ->
-            reply_ok(#{success => true}, Req1, State);
+            Req2 = reply_json(200,
+                #{<<"code">> => <<"SUCCESS">>, <<"message">> => <<"OK">>}, Req1),
+            {ok, Req2, State};
         {error, Reason} ->
             logger:error("Webhook processing failed for ~s: ~p", [Provider, Reason]),
-            reply_err(400, <<"Webhook processing failed">>, Req1, State)
+            Req2 = reply_json(500,
+                #{<<"code">> => <<"FAIL">>, <<"message">> => <<"processing error">>}, Req1),
+            {ok, Req2, State}
     end;
 
 %% === T4-22: Payment Plan Management CRUD (admin-only) ===
@@ -677,11 +681,16 @@ validate_order_params(Provider, Amount) ->
     end.
 
 handle_webhook(Provider, Body, Req) ->
-    ContentType = cowboy_req:header(<<"content-type">>, Req, <<>>),
-    IsForm = binary:match(ContentType, <<"application/x-www-form-urlencoded">>) =/= nomatch,
-    case {Provider, IsForm} of
-        {<<"alipay">>, true} ->
+    ContentType  = cowboy_req:header(<<"content-type">>, Req, <<>>),
+    IsForm       = binary:match(ContentType,
+                                <<"application/x-www-form-urlencoded">>) =/= nomatch,
+    WxTimestamp  = cowboy_req:header(<<"wechatpay-timestamp">>, Req, <<>>),
+    IsWechat     = Provider =:= <<"wechat">> andalso WxTimestamp =/= <<>>,
+    case {Provider, IsForm, IsWechat} of
+        {<<"alipay">>, true, _} ->
             handle_alipay_notify(Body);
+        {<<"wechat">>, _, true} ->
+            handle_wechat_notify(Body, Req);
         _ ->
             case jsx:is_json(Body) of
                 false ->
@@ -695,6 +704,50 @@ handle_webhook(Provider, Body, Req) ->
                         true ->
                             process_webhook_event(Provider, Payload)
                     end
+            end
+    end.
+
+handle_wechat_notify(Body, Req) ->
+    Headers = maps:to_list(cowboy_req:headers(Req)),
+    case ersub_wechat:verify_callback(Headers, Body) of
+        {error, Reason} ->
+            logger:warning("WeChat notify verify failed: ~p", [Reason]),
+            {error, Reason};
+        {ok, Payload} ->
+            TransactionId = maps:get(<<"transaction_id">>, Payload, <<>>),
+            OutTradeNo    = maps:get(<<"out_trade_no">>,   Payload, <<>>),
+            TradeState    = maps:get(<<"trade_state">>,    Payload, <<>>),
+            OrderId       = to_integer(OutTradeNo),
+            case TradeState of
+                <<"SUCCESS">> ->
+                    %% Primary idempotency: order status. Audit log is for trail only.
+                    case ersub_payment_srv:get_order(OrderId) of
+                        {ok, #{status := <<"paid">>}} ->
+                            ok;
+                        {ok, _} ->
+                            case ersub_payment_srv:fulfill_order(OrderId, TransactionId) of
+                                ok ->
+                                    ersub_repo:query(
+                                        "INSERT INTO payment_audit_logs "
+                                        "(order_id, action, idempotency_key) "
+                                        "VALUES ($1, 'wechat_notify', $2) "
+                                        "ON CONFLICT (idempotency_key) DO NOTHING",
+                                        [OrderId, TransactionId]),
+                                    ok;
+                                {error, order_not_pending} ->
+                                    %% Concurrent notify already fulfilled this order.
+                                    logger:info("WeChat notify: concurrent fulfill, order=~s",
+                                                [OutTradeNo]),
+                                    ok;
+                                {error, FulfillReason} ->
+                                    {error, FulfillReason}
+                            end;
+                        {error, not_found} ->
+                            {error, order_not_found}
+                    end;
+                _ ->
+                    logger:info("WeChat notify: state=~s order=~s", [TradeState, OutTradeNo]),
+                    ok
             end
     end.
 
@@ -757,9 +810,10 @@ verify_webhook_signature(Provider, Body, Req) ->
     Secret = get_webhook_secret(Provider),
     case {Signature, Secret} of
         {<<>>, <<>>} ->
-            %% No signature verification configured, allow in dev
-            true;
+            false;  %% fail-closed: no signature + no secret → deny
         {<<>>, _} ->
+            false;
+        {_, <<>>} ->
             false;
         {Sig, Sec} ->
             Expected = binary:encode_hex(
@@ -810,8 +864,8 @@ reply_err(Status, Reason, Req0, State) when is_binary(Reason) ->
     Req = reply_json(Status, #{error => #{message => Reason}}, Req0),
     {ok, Req, State};
 reply_err(Status, Reason, Req0, State) ->
-    Msg = iolist_to_binary(io_lib:format("~p", [Reason])),
-    Req = reply_json(Status, #{error => #{message => Msg}}, Req0),
+    logger:warning("Payment handler error ~p: ~p", [Status, Reason]),
+    Req = reply_json(Status, #{error => #{message => <<"Internal error">>}}, Req0),
     {ok, Req, State}.
 
 reply_auth_error(missing_token, Req0, State) ->
