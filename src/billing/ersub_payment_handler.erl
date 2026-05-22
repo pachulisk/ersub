@@ -21,14 +21,16 @@ handle(<<"POST">>, [<<"orders">>], Req0, State) ->
         {ok, #{<<"user_id">> := UserId}} ->
             {ok, Body, Req1} = cowboy_req:read_body(Req0),
             Params = jsx:decode(Body, [return_maps]),
-            Provider = maps:get(<<"provider">>, Params, <<>>),
-            Amount = maps:get(<<"amount_usd">>, Params, 0),
+            Provider    = maps:get(<<"provider">>,     Params, <<>>),
+            Amount      = maps:get(<<"amount_usd">>,   Params, 0),
+            PaymentType = maps:get(<<"payment_type">>, Params, <<"alipay">>),
             case validate_order_params(Provider, Amount) of
                 {error, Msg} ->
                     reply_err(400, Msg, Req1, State);
                 ok ->
                     AmountFloat = to_float(Amount),
-                    case ersub_payment_srv:create_order(UserId, Provider, AmountFloat) of
+                    Opts = #{payment_type => PaymentType},
+                    case ersub_payment_srv:create_order(UserId, Provider, AmountFloat, Opts) of
                         {ok, Order} ->
                             reply_ok(#{data => Order}, Req1, State);
                         {error, Reason2} ->
@@ -126,6 +128,11 @@ handle(<<"GET">>, [<<"orders">>, IdBin], Req0, State) ->
 handle(<<"POST">>, [<<"webhooks">>, Provider], Req0, State) ->
     {ok, Body, Req1} = cowboy_req:read_body(Req0, #{length => 65536, period => 5000}),
     case handle_webhook(Provider, Body, Req1) of
+        ok when Provider =:= <<"easypay">> ->
+            %% Easy Pay protocol requires plain-text "success" in the response body.
+            Req2 = cowboy_req:reply(200, #{<<"content-type">> => <<"text/plain">>},
+                                    <<"success">>, Req1),
+            {ok, Req2, State};
         ok ->
             Req2 = reply_json(200,
                 #{<<"code">> => <<"SUCCESS">>, <<"message">> => <<"OK">>}, Req1),
@@ -691,6 +698,8 @@ handle_webhook(Provider, Body, Req) ->
             handle_alipay_notify(Body);
         {<<"wechat">>, _, true} ->
             handle_wechat_notify(Body, Req);
+        {<<"easypay">>, true, _} ->
+            handle_easypay_notify(Body);
         _ ->
             case jsx:is_json(Body) of
                 false ->
@@ -780,6 +789,48 @@ handle_alipay_notify(Body) ->
                     end;
                 _ ->
                     logger:info("Alipay notify: status=~s order=~s",
+                                [TradeStatus, OutTradeNo]),
+                    ok
+            end
+    end.
+
+handle_easypay_notify(Body) ->
+    Params = parse_form_body(Body),
+    case ersub_easypay:verify_callback(Params) of
+        {error, Reason} ->
+            logger:warning("EasyPay notify: verify failed: ~p", [Reason]),
+            {error, invalid_signature};
+        {ok, Verified} ->
+            OutTradeNo  = maps:get(<<"out_trade_no">>,  Verified, <<>>),
+            TradeNo     = maps:get(<<"trade_no">>,      Verified, <<>>),
+            TradeStatus = maps:get(<<"trade_status">>,  Verified, <<>>),
+            OrderId     = to_integer(OutTradeNo),
+            case {TradeStatus, OrderId, TradeNo} of
+                {_, 0, _} ->
+                    logger:warning("EasyPay notify: invalid out_trade_no=~s", [OutTradeNo]),
+                    {error, invalid_order_id};
+                {_, _, <<>>} ->
+                    logger:warning("EasyPay notify: empty trade_no order=~s", [OutTradeNo]),
+                    {error, missing_trade_no};
+                {<<"TRADE_SUCCESS">>, _, _} ->
+                    IdempotencyRes = ersub_repo:query(
+                        "INSERT INTO payment_audit_logs "
+                        "(order_id, action, idempotency_key) "
+                        "VALUES ($1, 'easypay_notify', $2) "
+                        "ON CONFLICT (idempotency_key) DO NOTHING RETURNING id",
+                        [OrderId, TradeNo]),
+                    case IdempotencyRes of
+                        {ok, 0, _, []} ->
+                            ok;
+                        _ ->
+                            case ersub_payment_srv:fulfill_order(OrderId, TradeNo) of
+                                ok              -> ok;
+                                {error, order_not_pending} -> ok;
+                                {error, FulfillReason} -> {error, FulfillReason}
+                            end
+                    end;
+                _ ->
+                    logger:info("EasyPay notify: status=~s order=~s",
                                 [TradeStatus, OutTradeNo]),
                     ok
             end
@@ -897,7 +948,8 @@ to_float(V) when is_binary(V) ->
 to_float(_) -> 0.0.
 
 to_integer(V) when is_integer(V) -> V;
-to_integer(V) when is_binary(V) -> binary_to_integer(V);
+to_integer(V) when is_binary(V) ->
+    try binary_to_integer(V) catch _:_ -> 0 end;
 to_integer(_) -> 0.
 
 to_bin(V) when is_binary(V) -> V;

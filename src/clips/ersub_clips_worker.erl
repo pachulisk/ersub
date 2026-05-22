@@ -444,6 +444,20 @@ handle_call(get_wechat_config, _From, #{port := Port} = State) ->
             {reply, {error, Reason}, State}
     end;
 
+%% === 19. GET EASYPAY CONFIG (easypay_config.clp) ===
+handle_call(get_easypay_config, _From, #{port := Port} = State) ->
+    case run_and_collect(Port, State) of
+        {ok, AllFacts, S1} ->
+            Configs = [F || F <- AllFacts,
+                       maps:get(<<"template">>, F, <<>>) =:= <<"easypay-config">>],
+            case Configs of
+                [C | _] -> {reply, {ok, C}, S1};
+                []      -> {reply, {ok, #{}}, S1}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end;
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 

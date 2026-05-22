@@ -115,7 +115,8 @@ static int load_rules(Environment *env, const char *dir) {
         "quota.clp", "account_status.clp", "model_routing.clp",
         "error_passthrough.clp", "failover.clp", "identity_adoption.clp",
         "pool_strategy.clp", "subscription.clp", "channel_filter.clp",
-        "budget_window.clp", NULL
+        "budget_window.clp",
+        "alipay_config.clp", "wechat_config.clp", "easypay_config.clp", NULL
     };
 
     for (int i = 0; files[i] != NULL; i++) {

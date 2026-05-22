@@ -81,6 +81,11 @@ security:
     allowed_origins: []
 
 payment:
+  providers:
+    - stripe
+    - alipay
+    - wechat
+    - easypay
   stripe:
     enabled: false
     secret_key: "${STRIPE_SECRET_KEY}"
@@ -100,6 +105,14 @@ payment:
     api_v3_key: "${WECHAT_API_V3_KEY}"
     platform_public_key: "${WECHAT_PLATFORM_PUBLIC_KEY}"
     notify_url: "${WECHAT_NOTIFY_URL}"
+  easypay:
+    pid:        "${EASYPAY_PID}"
+    pkey:       "${EASYPAY_PKEY}"
+    api_base:   "${EASYPAY_API_BASE}"
+    notify_url: "${EASYPAY_NOTIFY_URL}"
+    return_url: "${EASYPAY_RETURN_URL}"
+    cid_alipay: "${EASYPAY_CID_ALIPAY:-}"
+    cid_wxpay:  "${EASYPAY_CID_WXPAY:-}"
 
 ops:
   usage_cleanup:

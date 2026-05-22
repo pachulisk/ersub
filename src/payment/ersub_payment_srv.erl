@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_order/3, get_order/1, fulfill_order/2,
+-export([create_order/3, create_order/4, get_order/1, fulfill_order/2,
          redeem_code/2, apply_promo/2]).
 -export([request_refund/1, process_refund/1]).
 -export([generate_resume_token/1, verify_resume_token/1]).
@@ -18,7 +18,11 @@ start_link() ->
 %% Create a payment order.
 -spec create_order(integer(), binary(), number()) -> {ok, map()} | {error, term()}.
 create_order(UserId, Provider, AmountUsd) ->
-    gen_server:call(?SERVER, {create_order, UserId, Provider, AmountUsd}, 30000).
+    create_order(UserId, Provider, AmountUsd, #{}).
+
+-spec create_order(integer(), binary(), number(), map()) -> {ok, map()} | {error, term()}.
+create_order(UserId, Provider, AmountUsd, Opts) ->
+    gen_server:call(?SERVER, {create_order, UserId, Provider, AmountUsd, Opts}, 30000).
 
 %% Get order status.
 -spec get_order(integer()) -> {ok, map()} | {error, not_found}.
@@ -93,7 +97,7 @@ init([]) ->
     logger:info("Payment service started"),
     {ok, #{}}.
 
-handle_call({create_order, UserId, Provider, Amount}, _From, State) ->
+handle_call({create_order, UserId, Provider, Amount, Opts}, _From, State) ->
     Result = ersub_repo:query(
         "INSERT INTO payment_orders (user_id, provider, amount_usd) "
         "VALUES ($1, $2, $3) RETURNING id, status, created_at",
@@ -103,8 +107,20 @@ handle_call({create_order, UserId, Provider, Amount}, _From, State) ->
             Order0 = #{id => Id, user_id => UserId, provider => Provider,
                        amount_usd => Amount, status => Status,
                        created_at => CreatedAt},
-            {CheckoutUrl, Order1} = maybe_init_checkout(Id, Provider, Amount, Order0),
-            {ok, Order1#{checkout_url => CheckoutUrl}};
+            {CheckoutUrl, PaymentMode, Order1} = case Provider of
+                <<"easypay">> ->
+                    PaymentType = maps:get(payment_type, Opts, <<"alipay">>),
+                    maybe_init_checkout_easypay(Id, Amount, PaymentType, Order0);
+                _ ->
+                    {Url, O} = maybe_init_checkout(Id, Provider, Amount, Order0),
+                    {Url, null, O}
+            end,
+            Base  = Order1#{checkout_url => CheckoutUrl},
+            Final = case PaymentMode of
+                null -> Base;
+                M    -> Base#{payment_mode => M}
+            end,
+            {ok, Final};
         {error, Reason} -> {error, Reason}
     end,
     {reply, Reply, State};
@@ -367,6 +383,36 @@ maybe_init_checkout(OrderId, <<"wechat">>, AmountUsd, Order) ->
 maybe_init_checkout(_OrderId, _Provider, _Amount, Order) ->
     {null, Order}.
 
+maybe_init_checkout_easypay(OrderId, AmountUsd, PaymentType, Order) ->
+    case ersub_easypay:is_available() of
+        false -> {null, null, Order};
+        true  ->
+            Cfg    = case ersub_clips_pool:get_easypay_config() of
+                {ok, C} -> C;
+                _       -> #{}
+            end,
+            Rate   = get_float(maps:get(<<"usd-to-cny-rate">>, Cfg, 7.20)),
+            AmtCny = to_float(AmountUsd) * Rate,
+            Meta   = jsx:encode(#{payment_type => PaymentType,
+                                  cny_amount   => AmtCny,
+                                  cny_rate     => Rate}),
+            ersub_repo:query(
+                "UPDATE payment_orders SET metadata = $2 WHERE id = $1",
+                [OrderId, Meta]),
+            case ersub_easypay:create_order(
+                    integer_to_binary(OrderId), AmtCny,
+                    PaymentType, <<"ErSub Balance Top-up">>) of
+                {ok, #{pay_url := Url, payment_mode := Mode}} ->
+                    {Url, Mode, Order};
+                {ok, #{qr_code := Qr, payment_mode := Mode}} ->
+                    {Qr, Mode, Order};
+                {ok, _} ->
+                    {null, null, Order};
+                {error, _} ->
+                    {null, null, Order}
+            end
+    end.
+
 do_process_refund(OrderId, UserId, AmtFloat) ->
     ProviderResult = ersub_repo:query(
         "SELECT provider, metadata FROM payment_orders WHERE id = $1",
@@ -394,6 +440,9 @@ do_process_refund(OrderId, UserId, AmtFloat) ->
                         ok              -> do_internal_refund(OrderId, UserId, AmtFloat);
                         {error, Reason} -> {error, Reason}
                     end;
+                <<"easypay">> ->
+                    %% Refund via provider not yet implemented; fall back to internal credit.
+                    do_internal_refund(OrderId, UserId, AmtFloat);
                 _ ->
                     do_internal_refund(OrderId, UserId, AmtFloat)
             end;
